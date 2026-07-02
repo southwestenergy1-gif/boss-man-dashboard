@@ -10,7 +10,18 @@
 2. ⏳ **MANUAL (owner) — Enable leaked-password protection** in Auth (advisor: `auth_leaked_password_protection`). This is a dashboard-only toggle (no SQL/API path from here): Supabase Dashboard → Authentication → Sign In / Providers (or Policies) → turn on "Leaked password protection" (checks HaveIBeenPwned). No app impact. ~30 seconds.
 3. ✅ **DONE — Scoped public-bucket listing** (migration `scope_public_bucket_listing`): dropped the broad `SELECT` policies `chat-files read` (authenticated) and `logos_public_read` (public) so clients can no longer *list* every file. Confirmed safe: both buckets are `public`, the CRM only fetches them by known path via `getPublicUrl` (public-URL reads bypass storage RLS) and has zero `.list()` calls; the private buckets `crm-files`/`deal-photos` (which use createSignedUrl/.download) were untouched. Object reads + logos still load.
 
-## B. Medium — needs a look before applying (verify caller, then Supabase)
+## B. Medium — needs a look before applying (verify caller, then Supabase)  🔶 PARTIALLY APPLIED 2026-07-02
+
+**Applied so far (verified safe, live now):**
+- ✅ **profiles self-escalation closed** (`lock_privilege_columns_on_profiles_self_update`): `profiles_update_own` now pins `role`, `can_see_money`, `active`, `dealer_id` to their stored values — a tampered client can no longer self-grant money visibility, re-activate itself, or hop dealers. Normal field edits still pass; admins unaffected (`profiles_admin_all`).
+- ✅ **payout self-approval closed** (`payout_requests_block_insert_self_approval`): `pr_insert` now forces ordinary requests to `status='pending'`/`approved_by IS NULL`/`paid=false`; only `can_money()` users may insert otherwise.
+- ✅ **dispatch update tightened** (`dispatch_assignments_update_with_check`): added the missing `WITH CHECK` mirroring `disp_update`'s USING clause.
+- ✅ **anon EXECUTE revoked on 4 ungated side-effect fns** (`revoke_anon_exec_ungated_side_effect_fns_v2`): `obligations_autopay_sweep` (kept `authenticated` — Accounting page uses it), `appt_send_reminders`, `claudio_morning_digest`, `followup_health_scan` (cron-only → `service_role` only). All owned by `postgres`, so pg_cron still runs them. Verified via `has_function_privilege`.
+
+**Still to do in B (need owner/n8n verification — HOLD):**
+- ⏳ Revoke anon EXECUTE on `pipeline_resolve_epe(uuid)`, `pipeline_match_epe_ai(text,text)`, `followup_timeline_html(text)` — no client use, but confirm their edge-function / internal callers use `service_role` before revoking (grant `service_role` alongside).
+- ⏳ **`notifications` cross-user insert** (`notif_insert` via `can_notify`): any authenticated rep can push notification text to every admin/ops + same-dealer user (phishing vector). Tighten `can_notify` — but first confirm which legit frontend flows insert cross-user notifications so we don't break task-assignment pings.
+- ⏳ `cold_quotes` secret rotation → see #5 (needs n8n coordination).
 
 4. **Lock down anon-executable functions.** ~79 functions grant `EXECUTE` to `anon`. Triggers are harmless; the concern is the non-trigger, no-auth ones callable with the public key. **Before revoking, confirm how each is called:**
    - Cron/side-effect fns (`appt_send_reminders`, `followups_tick`, `calendar_poll`, `claudio_morning_digest`, `email_renew_watches`, `pipeline_resolve_epe`, `followup_timeline_html`): if invoked by **pg_cron / server-side**, `REVOKE EXECUTE ... FROM anon;` is safe. If any is hit by an n8n HTTP call using the anon key, it needs a token instead first.
