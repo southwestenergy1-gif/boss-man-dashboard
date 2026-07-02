@@ -968,6 +968,10 @@ const esc = s => { const d = document.createElement('div'); d.textContent = s ??
 // attribute (e.g. iframe srcdoc) the quotes MUST be encoded too, or the first " breaks
 // the attribute and the content is lost. escAttr is quote-safe.
 const escAttr = s => esc(s).split('"').join('&quot;');
+// escJs: safe to embed a value inside a single-quoted JS string that itself sits in a
+// double-quoted HTML attribute, e.g. onclick="fn('${escJs(x)}')". Uses \xNN escapes that
+// survive HTML entity-decoding, so the value can never break out of the JS string.
+const escJs = s => escAttr(s).split('\\').join('\\\\').split("'").join('\\x27').split('\r').join('').split('\n').join('\\n');
 
 /* ── Recent-activity readability — Claudio's event notes are long & verbose.
    actSummary() distils each to a one-line plain-language headline; actTone()
@@ -1505,7 +1509,7 @@ function shellHTML(content, page){
   return `<div class="shell">
     <div class="sidebar" id="sidebar">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
-        <img src="${myDealer && myDealer.logo_url ? esc(myDealer.logo_url) : (document.documentElement.dataset.theme === 'dark' ? '/mark-dark.svg' : '/mark.svg')}" alt="SWE" style="height:38px;width:38px;border-radius:8px;flex-shrink:0;background:#13294B;padding:4px;object-fit:contain">
+        <img src="${myDealer && myDealer.logo_url ? escAttr(myDealer.logo_url) : (document.documentElement.dataset.theme === 'dark' ? '/mark-dark.svg' : '/mark.svg')}" alt="SWE" style="height:38px;width:38px;border-radius:8px;flex-shrink:0;background:#13294B;padding:4px;object-fit:contain">
         ${!isHouse() && myDealer
           ? `<div><div class="brand" style="margin-bottom:0">${esc(myDealer.name)}</div>
              <div class="brand-sub" style="margin-bottom:0">powered by Southwest Energy</div></div>`
@@ -1752,7 +1756,7 @@ function emailWho(t){
 function threadRow(t){
   const who = esc(deMoji(t.display || emailWho(t) || t.account_email || ''));
   const chip = t.clients && t.clients.name ? `<span class="et-chip">${icn('user','',11)} ${esc(t.clients.name)}</span>` : '';
-  const srch = esc(((t.display || '') + ' ' + (t.subject || '') + ' ' + (t.snippet || '') + ' ' + (t.last_from_email || '')).toLowerCase());
+  const srch = escAttr(((t.display || '') + ' ' + (t.subject || '') + ' ' + (t.snippet || '') + ' ' + (t.last_from_email || '')).toLowerCase());
   return `<div class="ethread ${t.is_unread ? 'unread' : ''}" data-tid="${t.id}" data-search="${srch}" onclick="openEmailThread('${t.id}')">
     <span class="et-dot"></span>
     <div class="et-main">
@@ -1835,7 +1839,7 @@ async function pageInbox(){
       ${mbList.length > 1 ? `<select onchange="inboxSetMailbox(this.value)" style="width:auto;min-height:36px;padding:7px 12px;font-size:13px;font-weight:700;color:var(--ink)">
         <option value="mine" ${(inboxState.mailbox||'mine')==='mine'?'selected':''}>${lang==='es'?'Mi bandeja':'My inbox'}</option>
         <option value="all" ${inboxState.mailbox==='all'?'selected':''}>${lang==='es'?'Todos los buzones':'All mailboxes'}</option>
-        ${mbList.map(mb=>`<option value="${esc(mb.email_address)}" ${inboxState.mailbox===mb.email_address?'selected':''}>${esc(mb.display_name||mb.email_address)} · ${esc(mb.email_address)}</option>`).join('')}
+        ${mbList.map(mb=>`<option value="${escAttr(mb.email_address)}" ${inboxState.mailbox===mb.email_address?'selected':''}>${esc(mb.display_name||mb.email_address)} · ${esc(mb.email_address)}</option>`).join('')}
       </select>` : `<span class="muted">${inboxState.myMailbox ? esc(inboxState.myMailbox) : 'No mailbox connected to your account yet.'}</span>`}
     </div>
     <div class="ibx-folders">${INBOX_FOLDERS.map(f => `<button class="ibx-fold ${inboxState.folder===f.k?'on':''}" data-f="${f.k}" onclick="inboxSetFolder('${f.k}')">${icn(f.icon,'',14)} ${f.label}</button>`).join('')}
@@ -1879,8 +1883,10 @@ window.openEmailThread = async (tid) => {
     const safeHtml = (m.body_html || '').replaceAll('src="http://','src="https://').replaceAll("src='http://","src='https://").replaceAll('src=http://','src=https://');
     // Prefer the rich HTML part (images, buttons, layout) — like Gmail/Outlook.
     // Fall back to plain text only when there's no HTML (e.g. our outbound notes).
+    // SECURITY: never add allow-scripts to this sandbox — email HTML is untrusted. Without
+    // allow-scripts the same-origin token is inert (only our onload height-probe uses it).
     const body = m.body_html
-      ? `<div class="emsg-body" style="padding:0 14px 14px"><iframe sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" srcdoc="${escAttr('<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><base target=_blank><style>html,body{margin:0}body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#1a1a1a;word-break:break-word;overflow-wrap:anywhere;background:#f4f5f7}img{max-width:100%;height:auto}img[src*="logo-alt"],img[src*="logo_alt"]{background:#2b2f36;border-radius:4px;padding:6px}table{max-width:100%!important}.signwell-button a,a[style*="background"]{display:inline-block}</style>' + safeHtml)}" onload="try{this.style.height=Math.min(this.contentWindow.document.body.scrollHeight+24,1400)+'px'}catch(e){this.style.height='420px'}"></iframe></div>`
+      ? `<div class="emsg-body" style="padding:0 14px 14px"><iframe sandbox="allow-same-origin allow-popups" referrerpolicy="no-referrer" srcdoc="${escAttr('<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><base target=_blank><style>html,body{margin:0}body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#1a1a1a;word-break:break-word;overflow-wrap:anywhere;background:#f4f5f7}img{max-width:100%;height:auto}img[src*="logo-alt"],img[src*="logo_alt"]{background:#2b2f36;border-radius:4px;padding:6px}table{max-width:100%!important}.signwell-button a,a[style*="background"]{display:inline-block}</style>' + safeHtml)}" onload="try{this.style.height=Math.min(this.contentWindow.document.body.scrollHeight+24,1400)+'px'}catch(e){this.style.height='420px'}"></iframe></div>`
       : (bodyText ? `<div class="emsg-body">${esc(deMoji(bodyText))}</div>` : `<div class="emsg-body muted">(no content)</div>`);
     const outb = m.direction === 'outbound';
     const av = outb ? (me.name || 'Me') : (m.from_name || m.from_email || '?');
@@ -1939,12 +1945,12 @@ window.emailReplyInline = (mode) => {
   const body = mode === 'forward' ? emCtx.fwdBody : '';
   const heading = mode === 'forward' ? (lang==='es'?'Reenviar':'Forward') : (mode === 'replyall' ? (lang==='es'?'Responder a todos':'Reply all') : (lang==='es'?'Responder':'Reply'));
   zone.innerHTML = `<div class="em-inline">
-    <input type="hidden" id="emFrom" value="${esc(emCtx.account)}">
-    <input type="hidden" id="emThread" value="${esc(emCtx.gmailThreadId || '')}">
-    <input type="hidden" id="emInReplyTo" value="${esc(mode === 'forward' ? '' : emCtx.inReplyTo)}">
-    <input type="hidden" id="emRefs" value="${esc(mode === 'forward' ? '' : emCtx.inReplyTo)}">
-    <input type="hidden" id="emSubject" value="${esc(subject)}">
-    <div class="em-inline-hd"><b>${heading}</b><span class="em-inline-to"><span class="muted">${lang==='es'?'Para':'To'}:</span><input id="emTo" value="${esc(to)}" placeholder="name@email.com"></span></div>
+    <input type="hidden" id="emFrom" value="${escAttr(emCtx.account)}">
+    <input type="hidden" id="emThread" value="${escAttr(emCtx.gmailThreadId || '')}">
+    <input type="hidden" id="emInReplyTo" value="${escAttr(mode === 'forward' ? '' : emCtx.inReplyTo)}">
+    <input type="hidden" id="emRefs" value="${escAttr(mode === 'forward' ? '' : emCtx.inReplyTo)}">
+    <input type="hidden" id="emSubject" value="${escAttr(subject)}">
+    <div class="em-inline-hd"><b>${heading}</b><span class="em-inline-to"><span class="muted">${lang==='es'?'Para':'To'}:</span><input id="emTo" value="${escAttr(to)}" placeholder="name@email.com"></span></div>
     <textarea id="emBody" placeholder="${lang==='es'?'Escribe tu mensaje…':'Write your message…'}">${esc(body)}</textarea>
     <div id="emAtts" class="em-atts" data-drop-input="emFileInput"></div>
     <input type="file" id="emFileInput" multiple style="display:none" onchange="emailAttachFiles(this)">
@@ -1979,7 +1985,7 @@ window.inboxFilter = (q) => {
 /* ── attachments ── */
 function fmtBytes(n){ if (!n) return ''; if (n < 1024) return n + ' B'; if (n < 1048576) return (n / 1024).toFixed(0) + ' KB'; return (n / 1048576).toFixed(1) + ' MB'; }
 function fileIcon(m){ m = m || ''; return icn(m.startsWith('image/') ? 'camera' : 'file', '', 15); }
-function attachChip(a){ return `<button class="eatt" onclick="openAttachment('${a.id}', this)" title="${esc(a.filename || '')}"><span class="eatt-ic">${fileIcon(a.mime_type)}</span><span class="eatt-name">${esc(a.filename || 'file')}</span><span class="eatt-sz">${fmtBytes(a.size_bytes)}</span></button>`; }
+function attachChip(a){ return `<button class="eatt" onclick="openAttachment('${escJs(a.id)}', this)" title="${escAttr(a.filename || '')}"><span class="eatt-ic">${fileIcon(a.mime_type)}</span><span class="eatt-name">${esc(a.filename || 'file')}</span><span class="eatt-sz">${fmtBytes(a.size_bytes)}</span></button>`; }
 window.openAttachment = async (id, btn) => {
   const nxt = btn.nextElementSibling;
   if (nxt && nxt.classList && nxt.classList.contains('eatt-prev')) { nxt.remove(); return; } // toggle preview off
@@ -1992,10 +1998,10 @@ window.openAttachment = async (id, btn) => {
   const bin = atob(b64); const arr = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
   const url = URL.createObjectURL(new Blob([arr], { type: mime }));
-  const dl = `<a class="eatt-dl" href="${url}" download="${esc(data.filename || 'file')}">${icn('download','',13)} Download</a>`;
+  const dl = `<a class="eatt-dl" href="${url}" download="${escAttr(data.filename || 'file')}">${icn('download','',13)} Download</a>`;
   const d = document.createElement('div'); d.className = 'eatt-prev';
-  if (/^image\//.test(mime)) { d.innerHTML = `<img src="${url}" alt="${esc(data.filename || '')}">${dl}`; btn.after(d); }
-  else if (mime === 'application/pdf') { d.innerHTML = `<iframe src="${url}#toolbar=1" title="${esc(data.filename || '')}"></iframe>${dl}`; btn.after(d); }
+  if (/^image\//.test(mime)) { d.innerHTML = `<img src="${url}" alt="${escAttr(data.filename || '')}">${dl}`; btn.after(d); }
+  else if (mime === 'application/pdf') { d.innerHTML = `<iframe src="${url}#toolbar=1" title="${escAttr(data.filename || '')}"></iframe>${dl}`; btn.after(d); }
   else if (/^text\//.test(mime)) { d.innerHTML = `<pre class="eatt-text">${esc(new TextDecoder().decode(arr).slice(0, 20000))}</pre>${dl}`; btn.after(d); }
   else { const a = document.createElement('a'); a.href = url; a.download = data.filename || 'attachment'; document.body.appendChild(a); a.click(); a.remove(); toast('Downloaded ' + (data.filename || '') + ' (can\'t preview this type)'); return; }
   setTimeout(() => URL.revokeObjectURL(url), 300000);
@@ -2007,11 +2013,11 @@ function emailModalHTML(o){
     <div style="background:var(--surface);width:100%;max-width:640px;border-radius:14px 14px 0 0;max-height:92vh;overflow:auto;padding:18px 18px calc(18px + env(safe-area-inset-bottom,0px));box-shadow:0 -8px 40px rgba(0,0,0,.25)">
       <div class="row" style="margin-bottom:12px"><div style="font-family:var(--serif);font-size:18px;color:var(--ink)">${o.title}</div>
         <button class="btn btn-ghost btn-sm" onclick="emailCloseModal()">Close</button></div>
-      <input type="hidden" id="emFrom" value="${esc(o.from || '')}"><input type="hidden" id="emThread" value="${esc(o.threadId || '')}">
-      <input type="hidden" id="emInReplyTo" value="${esc(o.inReplyTo || '')}"><input type="hidden" id="emRefs" value="${esc(o.references || '')}">
+      <input type="hidden" id="emFrom" value="${escAttr(o.from || '')}"><input type="hidden" id="emThread" value="${escAttr(o.threadId || '')}">
+      <input type="hidden" id="emInReplyTo" value="${escAttr(o.inReplyTo || '')}"><input type="hidden" id="emRefs" value="${escAttr(o.references || '')}">
       <div class="lbl">From</div><div class="muted" style="margin-bottom:10px">${esc(o.from || '')}</div>
-      <div class="lbl">To</div><input id="emTo" value="${esc(o.to || '')}" placeholder="name@email.com" style="margin-bottom:10px">
-      <div class="lbl">Subject</div><input id="emSubject" value="${esc(o.subject || '')}" placeholder="Subject" style="margin-bottom:10px">
+      <div class="lbl">To</div><input id="emTo" value="${escAttr(o.to || '')}" placeholder="name@email.com" style="margin-bottom:10px">
+      <div class="lbl">Subject</div><input id="emSubject" value="${escAttr(o.subject || '')}" placeholder="Subject" style="margin-bottom:10px">
       <div class="lbl">Message</div><textarea id="emBody" style="min-height:200px" placeholder="Write your message&hellip;">${esc(o.body || '')}</textarea>
       <div id="emAiPanel" style="display:none;margin-top:10px;padding:11px;border:1px solid var(--terra);border-radius:10px;background:var(--surface2)">
         <div class="lbl" style="margin-bottom:7px">${icn('sparkles','',12)} AI &mdash; rewrite what&#39;s in the box</div>
@@ -2117,13 +2123,18 @@ window.emailReply = async (tid) => {
 };
 window.emailSend = async () => {
   const btn = document.getElementById('emSendBtn');
-  const to = document.getElementById('emTo').value.split(',').map(s => s.trim()).filter(Boolean);
-  const subject = document.getElementById('emSubject').value;
-  const bodyRaw = document.getElementById('emBody').value;
-  const from = document.getElementById('emFrom').value;
-  const threadId = document.getElementById('emThread').value || null;
-  const inReplyTo = document.getElementById('emInReplyTo').value || null;
-  const references = document.getElementById('emRefs').value || null;
+  // Scope all field reads to THIS compose modal. The inline reply (#emActionZone) reuses
+  // #emSubject/#emBody, so an unscoped getElementById could grab the inline draft and email
+  // the wrong content/recipient. emSendBtn is modal-only, so its scrim is the right scope.
+  const scope = btn?.closest('.modal-scrim') || document;
+  const q = sel => scope.querySelector(sel);
+  const to = q('#emTo').value.split(',').map(s => s.trim()).filter(Boolean);
+  const subject = q('#emSubject').value;
+  const bodyRaw = q('#emBody').value;
+  const from = q('#emFrom').value;
+  const threadId = q('#emThread').value || null;
+  const inReplyTo = q('#emInReplyTo').value || null;
+  const references = q('#emRefs').value || null;
   if (!to.length) { toast('Add a recipient'); return; }
   if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
   const body_html = esc(bodyRaw).replace(/\n/g, '<br>');
@@ -2650,8 +2661,8 @@ window.fbConfirm = () => {
     <h1 class="page" style="font-size:22px">${es?'Confirmar':'Confirm'} <em>${es?'cita.':'appointment.'}</em></h1>
     <div class="muted" style="font-size:12px;margin-bottom:6px">${es?'Esto crea el contacto y agenda la cita de una sola vez.':'This creates the contact and books the appointment in one tap.'}</div>
     <div id="fcAiHint" style="font-size:11.5px;margin-bottom:10px;color:var(--terra);min-height:15px;font-weight:600"></div>
-    <div style="margin-bottom:8px"><input id="fcTitle" value="${esc((lead.name||'')+' — '+(es?'cita Facebook':'Facebook appt'))}"></div>
-    <div style="margin-bottom:8px"><input id="fcPhone" type="tel" inputmode="tel" value="${esc(lead.phone||'')}" placeholder="${es?'Teléfono del cliente':'Customer phone'}"></div>
+    <div style="margin-bottom:8px"><input id="fcTitle" value="${escAttr((lead.name||'')+' — '+(es?'cita Facebook':'Facebook appt'))}"></div>
+    <div style="margin-bottom:8px"><input id="fcPhone" type="tel" inputmode="tel" value="${escAttr(lead.phone||'')}" placeholder="${es?'Teléfono del cliente':'Customer phone'}"></div>
     <div class="grid g2" style="margin-bottom:8px"><input id="fcDate" type="date" value="${dStr}"><input id="fcTime" type="time" value="10:00"></div>
     <div style="margin-bottom:8px"><input id="fcAddr" placeholder="${es?'Dirección del cliente':'Customer address'}"></div>
     <div class="lbl" style="margin:2px 0 5px">${es?'Asignar a':'Assign to'}</div>
@@ -2735,8 +2746,8 @@ window.fbCreateDeal = () => {
   host.innerHTML = `<div class="modal-scrim" style="z-index:2000" onclick="if(event.target===this)this.remove()"><div class="modal">
     <h1 class="page" style="font-size:22px">${es?'Crear':'Create'} <em>${es?'trabajo.':'deal.'}</em></h1>
     <div class="muted" style="font-size:12px;margin-bottom:10px">${es?'Registra la venta como un trabajo con precio y la enlaza a este prospecto.':'Logs the sale as a priced job and links it to this lead.'}</div>
-    <div style="margin-bottom:8px"><input id="fdName" value="${esc(lead.name||'')}" placeholder="${es?'Nombre del cliente':'Customer name'}"></div>
-    <div style="margin-bottom:8px"><input id="fdPhone" type="tel" inputmode="tel" value="${esc(lead.phone||'')}" placeholder="${es?'Teléfono':'Phone'}"></div>
+    <div style="margin-bottom:8px"><input id="fdName" value="${escAttr(lead.name||'')}" placeholder="${es?'Nombre del cliente':'Customer name'}"></div>
+    <div style="margin-bottom:8px"><input id="fdPhone" type="tel" inputmode="tel" value="${escAttr(lead.phone||'')}" placeholder="${es?'Teléfono':'Phone'}"></div>
     <div class="grid g2" style="margin-bottom:8px">
       <select id="fdType"><option value="landscape">${es?'Jardinería':'Landscape'}</option><option value="solar">Solar</option><option value="construction">${es?'Construcción':'Construction'}</option></select>
       <select id="fdLender"><option>${es?'Efectivo':'Cash'}</option><option>TGUC</option><option>Salal</option><option>Synchrony</option></select>
@@ -3101,7 +3112,7 @@ window.dispClientFilter=()=>{ const inp=document.getElementById('daClientInput')
   const q=inp.value.trim().toLowerCase(), cur=(document.getElementById('daClient')||{}).value||'';
   let rows=dispClientCache.slice(); if(q) rows=rows.filter(c=>((c.name||'')+' '+(c.phone||'')).toLowerCase().includes(q)); rows=rows.slice(0,80);
   const clearRow=`<div class="disp-row${cur?'':' disp-add'}" data-id="" data-name="" onmousedown="dispClientPick(this)">— ${lang==='es'?'sin contacto':'no contact'} —</div>`;
-  list.innerHTML=(q?'':clearRow)+(rows.length?rows.map(c=>`<div class="disp-row" data-id="${esc(c.id)}" data-name="${escAttr(c.name||'')}" onmousedown="dispClientPick(this)"><b>${esc(c.name||'')}</b>${c.phone?`<span class="muted"> · ${esc(c.phone)}</span>`:''}</div>`).join(''):`<div class="disp-row muted" style="cursor:default">${lang==='es'?'Sin resultados':'No matches'}</div>`);
+  list.innerHTML=(q?'':clearRow)+(rows.length?rows.map(c=>`<div class="disp-row" data-id="${escAttr(c.id)}" data-name="${escAttr(c.name||'')}" onmousedown="dispClientPick(this)"><b>${esc(c.name||'')}</b>${c.phone?`<span class="muted"> · ${esc(c.phone)}</span>`:''}</div>`).join(''):`<div class="disp-row muted" style="cursor:default">${lang==='es'?'Sin resultados':'No matches'}</div>`);
   list.style.display='block';
 };
 window.dispClientPick=(el)=>{ const id=el.getAttribute('data-id')||'', name=el.getAttribute('data-name')||'';
@@ -3316,7 +3327,7 @@ window.serviceCallModal=async(editId)=>{ const es=lang==='es';
       ${headerMeta}
     </div>
     <div class="muted" style="font-size:12px;margin-bottom:12px">${es?'Etiqueta al cliente, el trabajo y el crew. Di qué hacer y cuándo.':'Tag the customer, the job and the crew. Say what to do and when.'}</div>
-    <input type="hidden" id="scOrigStatus" value="${esc(curStatus)}">
+    <input type="hidden" id="scOrigStatus" value="${escAttr(curStatus)}">
     <input type="hidden" id="scClient" value="${sc&&sc.client_id?escAttr(sc.client_id):''}">
     ${dispLbl(es?'Contacto / cliente':'Contact / customer')}
     <div style="position:relative;margin-bottom:8px">
@@ -3375,7 +3386,7 @@ window.scClientFilter=()=>{ const inp=document.getElementById('scClientInput'), 
   const q=inp.value.trim().toLowerCase(), cur=(document.getElementById('scClient')||{}).value||'';
   let rows=dispClientCache.slice(); if(q) rows=rows.filter(c=>((c.name||'')+' '+(c.phone||'')).toLowerCase().includes(q)); rows=rows.slice(0,80);
   const clearRow=`<div class="disp-row${cur?'':' disp-add'}" data-id="" data-name="" onmousedown="scClientPick(this)">— ${lang==='es'?'sin contacto':'no contact'} —</div>`;
-  list.innerHTML=(q?'':clearRow)+(rows.length?rows.map(c=>`<div class="disp-row" data-id="${esc(c.id)}" data-name="${escAttr(c.name||'')}" onmousedown="scClientPick(this)"><b>${esc(c.name||'')}</b>${c.phone?`<span class="muted"> · ${esc(c.phone)}</span>`:''}</div>`).join(''):`<div class="disp-row muted" style="cursor:default">${lang==='es'?'Sin resultados':'No matches'}</div>`);
+  list.innerHTML=(q?'':clearRow)+(rows.length?rows.map(c=>`<div class="disp-row" data-id="${escAttr(c.id)}" data-name="${escAttr(c.name||'')}" onmousedown="scClientPick(this)"><b>${esc(c.name||'')}</b>${c.phone?`<span class="muted"> · ${esc(c.phone)}</span>`:''}</div>`).join(''):`<div class="disp-row muted" style="cursor:default">${lang==='es'?'Sin resultados':'No matches'}</div>`);
   list.style.display='block';
 };
 window.scClientPick=(el)=>{ const id=el.getAttribute('data-id')||'', name=el.getAttribute('data-name')||'';
@@ -3456,7 +3467,7 @@ async function scLoadPhotos(scId){ const strip=document.getElementById('scPhotoS
   let photos=data||[];
   try{ const pp=photos.map(p=>p.storage_path).filter(Boolean); if(pp.length){ const { data:sg }=await sb.storage.from('deal-photos').createSignedUrls(pp,28800); const m={}; (sg||[]).forEach(s=>{ if(s&&s.path&&s.signedUrl) m[s.path]=s.signedUrl; }); photos.forEach(p=>{ if(p.storage_path&&m[p.storage_path]) p.url=m[p.storage_path]; }); } }catch(_){}
   scPhotos=photos;
-  strip.innerHTML = photos.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">${photos.map(p=>`<div style="position:relative;width:84px;height:84px;border-radius:9px;overflow:hidden;border:1px solid var(--border)"><a href="${esc(p.url)}" target="_blank" rel="noopener"><img src="${esc(p.url)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover"></a><span onclick="scPhotoDel('${p.id}','${esc(p.storage_path||'')}','${scId}')" title="${es?'Eliminar':'Delete'}" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);color:#fff;width:20px;height:20px;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;line-height:1">&times;</span></div>`).join('')}</div>` : `<div class="muted" style="font-size:12px;margin-top:6px">${es?'Sin fotos todavía.':'No photos yet.'}</div>`;
+  strip.innerHTML = photos.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">${photos.map(p=>`<div style="position:relative;width:84px;height:84px;border-radius:9px;overflow:hidden;border:1px solid var(--border)"><a href="${escAttr(p.url)}" target="_blank" rel="noopener"><img src="${escAttr(p.url)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover"></a><span onclick="scPhotoDel('${p.id}','${esc(p.storage_path||'')}','${scId}')" title="${es?'Eliminar':'Delete'}" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);color:#fff;width:20px;height:20px;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;line-height:1">&times;</span></div>`).join('')}</div>` : `<div class="muted" style="font-size:12px;margin-top:6px">${es?'Sin fotos todavía.':'No photos yet.'}</div>`;
 }
 window.scPhotoDel=async(id,path,scId)=>{ if(!confirm(lang==='es'?'¿Eliminar esta foto?':'Delete this photo?')) return; await sb.from('deal_photos').delete().eq('id',id); if(path) await sb.storage.from('deal-photos').remove([path]); scLoadPhotos(scId); };
 
@@ -3467,7 +3478,9 @@ window.scSendScheduled=async(id)=>{ const es=lang==='es';
   const email=sc.clients&&sc.clients.email; if(!email){ toast(es?'El cliente no tiene correo':'Customer has no email'); return; }
   if(!confirm(es?('¿Enviar confirmación a '+email+'?'):('Send confirmation to '+email+'?'))) return;
   const crewNames=(Array.isArray(sc.crew)?sc.crew:[]).map(c=>c&&c.name).filter(Boolean).join(', ');
-  try{ await fetch(SC_NOTIFY,{ method:'POST', body:new URLSearchParams({ action:'service-call-scheduled', sc_code:sc.sc_code||'', customer_name:(sc.clients&&sc.clients.name)||'', customer_email:email, lang:(sc.clients&&sc.clients.lang)||'en', scheduled_for:sc.scheduled_for||'', time_block:sc.time_block||'', crew:crewNames, address:sc.address||'', what:sc.what_to_do||'' }) }); }catch(_){}
+  let sent=false;
+  try{ const r=await fetch(SC_NOTIFY,{ method:'POST', body:new URLSearchParams({ action:'service-call-scheduled', sc_code:sc.sc_code||'', customer_name:(sc.clients&&sc.clients.name)||'', customer_email:email, lang:(sc.clients&&sc.clients.lang)||'en', scheduled_for:sc.scheduled_for||'', time_block:sc.time_block||'', crew:crewNames, address:sc.address||'', what:sc.what_to_do||'' }) }); sent=r.ok; }catch(_){ sent=false; }
+  if(!sent){ toast(es?'No se pudo enviar el correo — inténtalo de nuevo':'Could not send the email — please try again'); return; }
   await sb.from('service_calls').update({ scheduled_email_sent_at:new Date().toISOString() }).eq('id',id);
   toast(es?'Confirmación enviada ✓':'Confirmation sent ✓'); serviceCallModal(id);
 };
@@ -3479,7 +3492,9 @@ window.scSendReport=async(id)=>{ const es=lang==='es';
   const email=sc&&sc.clients&&sc.clients.email; if(!email){ toast(es?'El cliente no tiene correo':'Customer has no email'); return; }
   if(!confirm(es?('¿Enviar reporte a '+email+'?'):('Send report to '+email+'?'))) return;
   let urls=[]; try{ const { data:ph }=await sb.from('deal_photos').select('storage_path').eq('service_call_id',id); const pp=(ph||[]).map(p=>p.storage_path).filter(Boolean); if(pp.length){ const { data:sg }=await sb.storage.from('deal-photos').createSignedUrls(pp,604800); urls=(sg||[]).map(s=>s&&s.signedUrl).filter(Boolean); } }catch(_){}
-  try{ await fetch(SC_NOTIFY,{ method:'POST', body:new URLSearchParams({ action:'service-call-completed', sc_code:sc.sc_code||'', customer_name:(sc.clients&&sc.clients.name)||'', customer_email:email, lang:(sc.clients&&sc.clients.lang)||'en', report, address:sc.address||'', photos:urls.join(' ') }) }); }catch(_){}
+  let sent=false;
+  try{ const r=await fetch(SC_NOTIFY,{ method:'POST', body:new URLSearchParams({ action:'service-call-completed', sc_code:sc.sc_code||'', customer_name:(sc.clients&&sc.clients.name)||'', customer_email:email, lang:(sc.clients&&sc.clients.lang)||'en', report, address:sc.address||'', photos:urls.join(' ') }) }); sent=r.ok; }catch(_){ sent=false; }
+  if(!sent){ toast(es?'El reporte se guardó, pero el correo no se pudo enviar — inténtalo de nuevo':'Report saved, but the email could not be sent — please try again'); return; }
   await sb.from('service_calls').update({ report_sent_at:new Date().toISOString() }).eq('id',id);
   toast(es?'Reporte enviado ✓':'Report sent ✓'); serviceCallModal(id);
 };
@@ -3658,7 +3673,7 @@ async function pageDashboard(){
   const maxC = Math.max(1, ...Object.values(counts));
   const [evq, qq, tq, pq, aq, rq] = await Promise.all([
     sb.from('deal_events').select('*, deals(deal_code, clients(name)), profiles:by_id(name)').order('at', { ascending:false }).limit(16),
-    sb.from('quotes').select('id', { count: 'exact', head: true }).eq('status', 'sent'),
+    sb.from('quotes').select('id, sent_at').eq('status', 'sent'),   // need the rows (sent_at) to compute cold quotes — head:true returned no data, so the nudge never fired
     sb.from('tasks').select('*, deals(deal_code, clients(name)), client:client_id(id,name)').eq('done', false).eq('assigned_to', me.id).or('kind.is.null,kind.neq.appointment').order('due_at', { ascending: true, nullsFirst: false }).limit(8),  // appointments show on their own dashboard line — don't double-count them as tasks here
     me.role === 'admin' ? sb.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'pending') : Promise.resolve({ count: 0 }),
     sb.from('announcements').select('id'),
@@ -3668,7 +3683,7 @@ async function pageDashboard(){
   const myTaskList = tq.data || [];
   window._taskCache = myTaskList;   // taskEditModal reads from here
   const now2 = new Date();
-  const today2 = now2.toISOString().slice(0, 10);
+  const today2 = dispToday();   // El Paso local date — UTC slice mis-bucketed tasks as overdue/today every evening
   const day = 864e5;
   const overdue = myTaskList.filter(t => t.due_at && t.due_at.slice(0, 10) < today2);
   const dueToday = myTaskList.filter(t => t.due_at && t.due_at.slice(0, 10) === today2);
@@ -3967,7 +3982,7 @@ async function pageTodo(){
   window._todoF = { scope:'mine', prio:'all', due:'all', person:'', q:'' };   // reset filters to match the freshly-rendered chips
   const teamById = {}; (team || []).forEach(p => teamById[p.id] = p);
   const open = ts.filter(t => !t.done);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dispToday();   // El Paso local date (was UTC — flipped a day every evening)
   const weekEnd = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return d.toISOString().slice(0,10); })();
   const bucketOf = t => !t.due_at ? 'none' : (t.due_at.slice(0,10) < today ? 'overdue' : (t.due_at.slice(0,10) === today ? 'today' : (t.due_at.slice(0,10) <= weekEnd ? 'week' : 'later')));
   const scopeOf = t => t.assigned_to === me.id ? 'mine' : (t.created_by === me.id ? 'delegated' : ((t.watchers||[]).includes(me.id) ? 'watching' : 'team'));
@@ -3998,7 +4013,7 @@ async function pageTodo(){
       ? (t.created_by !== me.id && t.creator ? `<span class="t-chip t-from">${es?'de ':'from '}${esc(t.creator.name)}</span>` : '')
       : (who ? `<span class="t-chip t-to">→ ${esc(who)}</span>` : `<span class="t-chip t-un">${es?'sin asignar':'unassigned'}</span>`);
     const sub = `${linkChip(t)}${assigneeChip}${watcherBadges(t)}`;
-    return `<div class="todo-row" data-bucket="${b}" data-scope="${scope}" data-prio="${t.priority||'normal'}" data-person="${t.assigned_to||''}" data-srch="${esc(((t.title||'')+' '+(t.client?t.client.name:'')+' '+(t.deals?t.deals.deal_code:'')+' '+(t.deals&&t.deals.clients?t.deals.clients.name:'')+' '+(who||'')).toLowerCase())}" style="border-left:4px solid ${accent}">
+    return `<div class="todo-row" data-bucket="${b}" data-scope="${scope}" data-prio="${t.priority||'normal'}" data-person="${t.assigned_to||''}" data-srch="${escAttr(((t.title||'')+' '+(t.client?t.client.name:'')+' '+(t.deals?t.deals.deal_code:'')+' '+(t.deals&&t.deals.clients?t.deals.clients.name:'')+' '+(who||'')).toLowerCase())}" style="border-left:4px solid ${accent}">
       <input type="checkbox" ${t.done ? 'checked' : ''} onchange="todoToggle('${t.id}', this)" class="todo-cb">
       <div class="todo-body"${canMod ? ` onclick="taskEditModal('${t.id}')" style="cursor:pointer"` : ''}>
         <div class="todo-title" title="${escAttr(t.title)}">${t.priority==='urgent'?'<span class="pdot" style="color:var(--red)">● </span>':t.priority==='high'?'<span class="pdot" style="color:var(--gold)">● </span>':''}${t.kind==='followup'?icn('phone','',12)+' ':''}${t.kind==='appointment'?icn('calendar','',12)+' ':''}${esc(t.title)}</div>
@@ -4015,7 +4030,7 @@ async function pageTodo(){
   window._todoPNames = { urgent:[es?'Urgente':'Urgent','var(--red)'], high:[es?'Alta':'High','var(--gold)'], normal:[es?'Normal':'Normal','var(--mid)'] };
   if (!window._todoSort) window._todoSort = 'due';
   const listHTML = todoBuildList();
-  const notifRow = n => `<div data-srch="${esc(((n.by_name||'')+' '+(n.text||'')).toLowerCase())}" onclick="openNotif('${n.id}','${n.deal_id||''}','${esc(n.url||'')}','${n.type||''}')" style="display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer;${n.read?'opacity:.5':''}">
+  const notifRow = n => `<div data-srch="${escAttr(((n.by_name||'')+' '+(n.text||'')).toLowerCase())}" onclick="openNotif('${escJs(n.id)}','${escJs(n.deal_id||'')}','${escJs(n.url||'')}','${escJs(n.type||'')}')" style="display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer;${n.read?'opacity:.5':''}">
     <span style="flex-shrink:0;color:var(--mid);line-height:1.3">${notifIcn(n.type,16)}</span>
     <div style="flex:1;min-width:0">${n.read?'':'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--terra);margin-right:5px"></span>'}<b style="font-size:12.5px">${esc(n.by_name||'')}</b>
       <div style="font-size:12.5px;color:var(--mid)">${esc(n.text)}</div></div>
@@ -4086,8 +4101,8 @@ async function pageTodo(){
               <div class="tf-lbl">${icn('user','',12)} ${es?'Asignar a':'Assign to'}</div>
               <select id="tdAssigneeSel" onchange="todoSetAssignee(this.value)" style="width:100%">
                 <option value="">${es?'Para mí':'Me'}</option>
-                ${teamOpts.filter(p=>p.name && p.name.toLowerCase()!==(me.name||'').toLowerCase()).length?`<optgroup label="${es?'Equipo':'Team'}">${teamOpts.filter(p=>p.name && p.name.toLowerCase()!==(me.name||'').toLowerCase()).map(p=>`<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('')}</optgroup>`:''}
-                ${['ops','admin'].includes(me.role)?`<optgroup label="${es?'Cuadrilla':'Crew'}">${TODO_ROSTER.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}</optgroup>`:''}
+                ${teamOpts.filter(p=>p.name && p.name.toLowerCase()!==(me.name||'').toLowerCase()).length?`<optgroup label="${es?'Equipo':'Team'}">${teamOpts.filter(p=>p.name && p.name.toLowerCase()!==(me.name||'').toLowerCase()).map(p=>`<option value="${escAttr(p.name)}">${esc(p.name)}</option>`).join('')}</optgroup>`:''}
+                ${['ops','admin'].includes(me.role)?`<optgroup label="${es?'Cuadrilla':'Crew'}">${TODO_ROSTER.map(n=>`<option value="${escAttr(n)}">${esc(n)}</option>`).join('')}</optgroup>`:''}
               </select>
             </div>
             <div>
@@ -4274,8 +4289,8 @@ window.taskClientFilter = (prefix) => {
   const deals = (window._taskDeals || []).filter(d => !q || ((d.deal_code||'')+' '+((d.clients&&d.clients.name)||'')+' '+(d.type||'')).toLowerCase().includes(q)).slice(0, 25);
   const clients = (window._taskClients || []).filter(c => !q || ((c.name||'')+' '+(c.phone||'')).toLowerCase().includes(q)).slice(0, 40);
   const clearRow = `<div class="task-cl-row" data-kind="" data-id="" data-name="" onmousedown="taskClientPick(this,'${prefix}')">— ${es?'sin cliente / trabajo':'no customer / job'} —</div>`;
-  const dealRows = deals.map(d => `<div class="task-cl-row" data-kind="deal" data-id="${esc(d.id)}" data-cid="${esc(d.client_id||'')}" data-name="${escAttr((d.deal_code||(es?'Trabajo':'Job'))+((d.clients&&d.clients.name)?(' · '+d.clients.name):''))}" onmousedown="taskClientPick(this,'${prefix}')">${icn('bolt','',12)} <b>${esc(d.deal_code||(es?'Trabajo':'Job'))}</b>${(d.clients&&d.clients.name)?`<span class="muted"> · ${esc(d.clients.name)}</span>`:''}</div>`).join('');
-  const clientRows = clients.map(c => `<div class="task-cl-row" data-kind="client" data-id="${esc(c.id)}" data-name="${escAttr(c.name||'')}" onmousedown="taskClientPick(this,'${prefix}')">${icn('user','',12)} <b>${esc(c.name||'')}</b>${c.phone?`<span class="muted"> · ${esc(c.phone)}</span>`:''}</div>`).join('');
+  const dealRows = deals.map(d => `<div class="task-cl-row" data-kind="deal" data-id="${escAttr(d.id)}" data-cid="${escAttr(d.client_id||'')}" data-name="${escAttr((d.deal_code||(es?'Trabajo':'Job'))+((d.clients&&d.clients.name)?(' · '+d.clients.name):''))}" onmousedown="taskClientPick(this,'${prefix}')">${icn('bolt','',12)} <b>${esc(d.deal_code||(es?'Trabajo':'Job'))}</b>${(d.clients&&d.clients.name)?`<span class="muted"> · ${esc(d.clients.name)}</span>`:''}</div>`).join('');
+  const clientRows = clients.map(c => `<div class="task-cl-row" data-kind="client" data-id="${escAttr(c.id)}" data-name="${escAttr(c.name||'')}" onmousedown="taskClientPick(this,'${prefix}')">${icn('user','',12)} <b>${esc(c.name||'')}</b>${c.phone?`<span class="muted"> · ${esc(c.phone)}</span>`:''}</div>`).join('');
   list.innerHTML = clearRow
     + (dealRows ? `<div class="task-cl-hdr">${es?'Trabajos':'Jobs'}</div>` + dealRows : '')
     + (clientRows ? `<div class="task-cl-hdr">${es?'Contactos':'Contacts'}</div>` + clientRows : '')
@@ -4338,7 +4353,7 @@ window.todoAdd = async () => {
   const due = document.getElementById('tdDue').value;
   const dueTime = (document.getElementById('tdTime')?.value || '').trim();
   // a time with no date means "today by that time"
-  const dueDate = due || (dueTime ? new Date().toISOString().slice(0,10) : '');
+  const dueDate = due || (dueTime ? dispToday() : '');
   // who: the picked @name (hidden field), else the first @word typed manually
   let whoName = (document.getElementById('tdAssignee')?.value || '').trim();
   if (!whoName) { const mm = raw.match(/@([A-Za-zÀ-ÿ]+)/); if (mm) whoName = mm[1]; }
@@ -4416,22 +4431,29 @@ window.taskEditModal = async (id) => {
   const clientName = t.client ? t.client.name : (((window._taskClients||[]).find(c => c.id === t.client_id)||{}).name || '');   // dashboard's task cache has no client join — fall back to the loaded client list
   const jobName = (t.deal_id && t.deals) ? ((t.deals.deal_code||(es?'Trabajo':'Job')) + ((t.deals.clients&&t.deals.clients.name)?(' · '+t.deals.clients.name):'')) : '';
   const linkName = jobName || clientName;   // a tagged job takes priority over the bare customer in the picker
+  // Include the free-text crew roster (and the task's current crew name, even if custom) so a
+  // roster-assigned task keeps its assignee when edited — otherwise the select falls back to
+  // "unassigned" and the save wipes assignee_name.
+  const crewNames = Array.from(new Set([...TODO_ROSTER, ...(t.assignee_name ? [t.assignee_name] : [])]));
   const teamOpts = `<option value="">${es?'— sin asignar / para ti —':'— unassigned / yours —'}</option>`
-    + team.map(p => `<option value="${p.id}" ${p.id === t.assigned_to ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+    + team.map(p => `<option value="${p.id}" ${p.id === t.assigned_to ? 'selected' : ''}>${esc(p.name)}</option>`).join('')
+    + ((['ops','admin'].includes(me.role) || t.assignee_name) ? `<optgroup label="${es?'Cuadrilla':'Crew'}">`
+        + crewNames.map(n => `<option value="${escAttr(n)}" ${(!t.assigned_to && t.assignee_name === n) ? 'selected' : ''}>${esc(n)}</option>`).join('')
+        + `</optgroup>` : '');
   const host = dealModalHost();
   host.innerHTML = `<div class="modal-scrim" onclick="if(event.target===this)this.remove()"><div class="modal" id="teModal" style="max-width:460px">
     <style>${TODO_CSS}</style>
     <h1 class="page" style="font-size:22px">${es?'Editar <em>tarea.</em>':'Edit <em>task.</em>'}</h1>
-    <input type="hidden" id="teId" value="${esc(t.id)}">
+    <input type="hidden" id="teId" value="${escAttr(t.id)}">
     <input type="hidden" id="teClient" value="${escAttr(t.client_id||'')}">
     <input type="hidden" id="teDeal" value="${escAttr(t.deal_id||'')}">
-    <input type="hidden" id="tePrio" value="${esc(prio)}">
+    <input type="hidden" id="tePrio" value="${escAttr(prio)}">
     <div class="lbl" style="margin-top:12px">${es?'Tarea':'Task'}</div>
-    <input id="teTitle" value="${esc(t.title)}" style="margin-bottom:10px" onkeydown="if(event.key==='Enter')taskEditSave()">
+    <input id="teTitle" value="${escAttr(t.title)}" style="margin-bottom:10px" onkeydown="if(event.key==='Enter')taskEditSave()">
     <div class="grid g2" style="margin-bottom:10px">
       <div><div class="lbl">${es?'Para quién':'Assigned to'}</div><select id="teWho">${teamOpts}</select></div>
       <div><div class="lbl">${es?'Fecha y hora':'Due date & time'}</div>
-        <div style="display:flex;gap:6px"><input id="teDue" type="date" value="${due}" style="flex:1;min-width:0"><input id="teTime" type="time" value="${esc(t.due_time||'')}" style="width:108px" title="${es?'Hora límite (opcional)':'Finish-by time (optional)'}"></div></div>
+        <div style="display:flex;gap:6px"><input id="teDue" type="date" value="${due}" style="flex:1;min-width:0"><input id="teTime" type="time" value="${escAttr(t.due_time||'')}" style="width:108px" title="${es?'Hora límite (opcional)':'Finish-by time (optional)'}"></div></div>
     </div>
     <div class="grid g2" style="margin-bottom:10px">
       <div><div class="lbl">${es?'Cliente o trabajo':'Customer or job'}</div>
@@ -4455,7 +4477,7 @@ window.taskEditModal = async (id) => {
       <button type="button" class="prio-chip${prio==='urgent'?' on':''}" data-tp="urgent" onclick="teSetPrio('urgent')">${icn('flame','',13)} ${es?'Urgente':'Urgent'}</button>
     </div>
     <div class="row" style="margin-top:16px">
-      <button class="btn btn-line btn-sm" onclick="todoDel('${esc(t.id)}');this.closest('.modal-scrim').remove()" style="color:var(--red);border-color:var(--red)">${icn('trash','',14)}</button>
+      <button class="btn btn-line btn-sm" onclick="todoDel('${escJs(t.id)}');this.closest('.modal-scrim').remove()" style="color:var(--red);border-color:var(--red)">${icn('trash','',14)}</button>
       <button class="btn btn-terra" style="flex:1;margin-left:8px" onclick="taskEditSave()">${es?'Guardar':'Save'}</button>
     </div>
   </div></div>`;
@@ -4467,16 +4489,21 @@ window.taskEditSave = async () => {
   const title = document.getElementById('teTitle').value.trim();
   if (!title) { toast(es?'Escribe la tarea':'Write the task first'); return; }
   const who = document.getElementById('teWho').value || null;
+  // who may be a real profile UUID or a free-text crew name — store it in the right column
+  // instead of forcing assignee_name to null (which dropped roster assignees on every edit).
+  const whoIsUuid = who && /^[0-9a-fA-F-]{36}$/.test(who);
+  const assigned_to_val = whoIsUuid ? who : null;
+  const assignee_name_val = (!whoIsUuid && who) ? who : null;
   const due = document.getElementById('teDue').value;
   const teTime = (document.getElementById('teTime')?.value || '').trim();
-  const dueDate = due || (teTime ? new Date().toISOString().slice(0,10) : '');
+  const dueDate = due || (teTime ? dispToday() : '');
   const client_id = (document.getElementById('teClient')?.value || '') || null;
   const deal_id = (document.getElementById('teDeal')?.value || '') || null;
   const priority = (document.getElementById('tePrio')?.value) || 'normal';
   const watchers = (window._watchers?.te || []).filter(wid => wid && wid !== who);
   const orig = (window._taskCache || []).find(x => x.id === id);
   const had = new Set((orig && orig.watchers) || []);
-  const { error } = await sb.from('tasks').update({ title, assigned_to: who, assignee_name: null, due_at: dueDate ? dueDate + 'T12:00:00' : null, due_time: teTime || null, client_id, deal_id, priority, watchers }).eq('id', id);
+  const { error } = await sb.from('tasks').update({ title, assigned_to: assigned_to_val, assignee_name: assignee_name_val, due_at: dueDate ? dueDate + 'T12:00:00' : null, due_time: teTime || null, client_id, deal_id, priority, watchers }).eq('id', id);
   if (error) { toast(error.message); return; }
   // notify anyone newly tagged
   const fresh = watchers.filter(wid => !had.has(wid) && wid !== me.id);
@@ -4597,9 +4624,9 @@ function calEvtStyle(a, laneCount, lane){
 function calEvt(a, laneCount, lane){
   const who = a.assignee ? a.assignee.name.split(' ')[0] : '';
   const tip = a.title + ' · ' + apptTime(a) + (who?' · '+who:'') + (a.location?' · '+a.location:'');
-  return `<div class="cw-evt${a.status==='done'?' done':''}" style="background:${apptColor(a)};${calEvtStyle(a,laneCount,lane)}" title="${esc(tip)}" onclick="event.stopPropagation();apptOpen('${a.id}')"><span class="ev-t">${esc(a.title)}</span><div class="et">${esc(apptTime(a))}${who?' · '+esc(who):''}</div></div>`;
+  return `<div class="cw-evt${a.status==='done'?' done':''}" style="background:${apptColor(a)};${calEvtStyle(a,laneCount,lane)}" title="${escAttr(tip)}" onclick="event.stopPropagation();apptOpen('${a.id}')"><span class="ev-t">${esc(a.title)}</span><div class="et">${esc(apptTime(a))}${who?' · '+esc(who):''}</div></div>`;
 }
-function calPill(a){ return `<div class="cw-pill${a.status==='done'?' done':''}" style="background:${apptColor(a)}" onclick="event.stopPropagation();apptOpen('${a.id}')" title="${esc(a.title)}">${esc(a.title)}</div>`; }
+function calPill(a){ return `<div class="cw-pill${a.status==='done'?' done':''}" style="background:${apptColor(a)}" onclick="event.stopPropagation();apptOpen('${a.id}')" title="${escAttr(a.title)}">${esc(a.title)}</div>`; }
 window.calSlotClick = (e, k) => {
   const rect = e.currentTarget.getBoundingClientRect();
   const hour = Math.max(CAL_START, Math.min(CAL_END-1, Math.floor(CAL_START + (e.clientY-rect.top)/CAL_HPX)));
@@ -4886,7 +4913,7 @@ window.apptModal = (opts) => {
   const defClientName = (e && e.clients && e.clients.name) ? e.clients.name : (opts.clientName||'');
   const host = document.getElementById('modalHost') || (() => { const d = document.createElement('div'); d.id='modalHost'; document.getElementById('pageContent').appendChild(d); return d; })();
   const curMissing = e && defWho && !apptTeamCache.some(x => x.id === defWho);   // editing a appt whose assignee is now inactive/absent
-  const teamOpts = (curMissing ? `<option value="${esc(defWho)}" selected>${esc((e.assignee && e.assignee.name) || (lang==='es'?'(asignado actual)':'(current assignee)'))}</option>` : '') +
+  const teamOpts = (curMissing ? `<option value="${escAttr(defWho)}" selected>${esc((e.assignee && e.assignee.name) || (lang==='es'?'(asignado actual)':'(current assignee)'))}</option>` : '') +
     apptTeamCache.map(x => `<option value="${x.id}" ${x.id===defWho?'selected':''}>${esc(x.name)}</option>`).join('');
   const typeOpts = Object.keys(APPT_TYPES).map(k => `<option value="${k}" ${k===defType?'selected':''}>${apptTypeLabel(k)}</option>`).join('');
   const done = e && e.status==='done';
@@ -4931,8 +4958,8 @@ window.apptModal = (opts) => {
       </style>
       <div class="lbl">${lang==='es'?'Contacto':'Contact'} <span class="muted" style="letter-spacing:0;text-transform:none">— ${lang==='es'?'de quién es la cita (opcional)':'who this appointment is for (optional)'}</span></div>
       <div id="apClientPick" style="position:relative;margin-bottom:10px">
-        <input type="hidden" id="apClient" value="${esc(defClient)}">
-        <input id="apClientInput" autocomplete="off" placeholder="${lang==='es'?'Busca un contacto…':'Search a contact…'}" value="${esc(defClientName)}" oninput="apClientFilter()" onfocus="apClientFilter()" onblur="setTimeout(()=>{const l=document.getElementById('apClientList');if(l)l.style.display='none'},200)">
+        <input type="hidden" id="apClient" value="${escAttr(defClient)}">
+        <input id="apClientInput" autocomplete="off" placeholder="${lang==='es'?'Busca un contacto…':'Search a contact…'}" value="${escAttr(defClientName)}" oninput="apClientFilter()" onfocus="apClientFilter()" onblur="setTimeout(()=>{const l=document.getElementById('apClientList');if(l)l.style.display='none'},200)">
         <div id="apClientList"></div>
       </div>
       <div id="apLocBox" style="margin-bottom:10px"></div>
@@ -4960,7 +4987,7 @@ window.apClientFilter = () => {
   rows = rows.slice(0, 80);
   const clearRow = `<div class="ap-cl-row ap-cl-clear${cur?'':' on'}" data-id="" data-name="" onmousedown="apClientPick(this)">— ${lang==='es'?'sin contacto':'no contact'} —</div>`;
   list.innerHTML = (q ? '' : clearRow) + (rows.length
-    ? rows.map(c => `<div class="ap-cl-row${c.id===cur?' on':''}" data-id="${esc(c.id)}" data-name="${escAttr(c.name||'')}" onmousedown="apClientPick(this)"><b>${esc(c.name||'')}</b>${c.phone?`<span class="muted"> · ${esc(c.phone)}</span>`:''}</div>`).join('')
+    ? rows.map(c => `<div class="ap-cl-row${c.id===cur?' on':''}" data-id="${escAttr(c.id)}" data-name="${escAttr(c.name||'')}" onmousedown="apClientPick(this)"><b>${esc(c.name||'')}</b>${c.phone?`<span class="muted"> · ${esc(c.phone)}</span>`:''}</div>`).join('')
     : `<div class="ap-cl-row muted" style="cursor:default">${lang==='es'?'Sin resultados':'No matches'}</div>`);
   list.style.display = 'block';
 };
@@ -5114,7 +5141,7 @@ async function pageDeals(){
       ${['ops','admin'].includes(me.role) ? `<button class="btn btn-terra btn-sm" onclick="newDealModal()">+ New Job</button>` : ''}</div>
     <div class="eyebrow" id="dCount">${dealsCache.length} ${es?'en total':'total'}</div>
     <div class="filterbar">
-      <div class="fb-search">${icn('search','',15)}<input id="dSearch" type="search" autocomplete="off" value="${esc(dealFilter.q||'')}" placeholder="${es?'Filtra por cliente, código, dirección, lender…':'Filter by client, code, address, lender…'}" oninput="dealFilterSet('q',this.value)"></div>
+      <div class="fb-search">${icn('search','',15)}<input id="dSearch" type="search" autocomplete="off" value="${escAttr(dealFilter.q||'')}" placeholder="${es?'Filtra por cliente, código, dirección, lender…':'Filter by client, code, address, lender…'}" oninput="dealFilterSet('q',this.value)"></div>
       <div class="seg" id="dSeg">${segs.map(([k,l])=>`<button data-seg="${k}" class="${dealFilter.seg===k?'on':''}" onclick="dealFilterSet('seg','${k}')">${l}</button>`).join('')}</div>
       <select class="fb-sort" onchange="dealFilterSet('sort',this.value)">
         <option value="new"${dealFilter.sort==='new'?' selected':''}>${es?'Nuevos → viejos':'Newest first'}</option>
@@ -5244,6 +5271,16 @@ window.createDeal = async () => {
       // block only when the address belongs to a DIFFERENT contact — making a job for the
       // contact that already owns the address is fine (don't trap existing leads).
       if (_dup && _dup.found && !(clientId !== 'new' && _dup.client_id === clientId)) { crmDupBlock(_dup, _dupAddr); btn.disabled = false; return; }
+    }
+    // Guard against accidentally creating a second job for a contact that already has an active
+    // one (the contact page now shows "Go to job" instead of "New job", but other entry points
+    // reach here too). Confirm rather than hard-block — solar + landscape can be separate jobs.
+    if (clientId && clientId !== 'new') {
+      const { data: existingDeals } = await sb.from('deals').select('id,status').eq('client_id', clientId).is('archived_at', null);
+      const activeCount = (existingDeals || []).filter(d => d.status === 'active').length;
+      if (activeCount && !confirm(lang==='es'
+          ? 'Este contacto ya tiene un trabajo activo. ¿Crear OTRO trabajo de todos modos?'
+          : 'This contact already has an active job. Create ANOTHER job anyway?')) { btn.disabled = false; return; }
     }
     if (clientId === 'new') {
       const first = (document.getElementById('dCFirst')?.value || '').trim();
@@ -5442,7 +5479,7 @@ async function pageDealDetail(id){
     <div class="scroll-y" style="max-height:318px">
     ${ex.map(e => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="expenseModal('${e.id}')">
       <span style="display:flex;align-items:center;gap:10px;min-width:0">
-        ${e.receipt_url ? `<img src="${esc(e.receipt_url)}" alt="" style="width:38px;height:38px;object-fit:cover;border-radius:8px;border:1px solid var(--border-2);flex-shrink:0">` : `<span class="av" style="width:38px;height:38px;border-radius:8px;background:var(--surface2);color:var(--mid);display:flex;align-items:center;justify-content:center;flex-shrink:0">${icn('receipt','',16)}</span>`}
+        ${e.receipt_url ? `<img src="${escAttr(e.receipt_url)}" alt="" style="width:38px;height:38px;object-fit:cover;border-radius:8px;border:1px solid var(--border-2);flex-shrink:0">` : `<span class="av" style="width:38px;height:38px;border-radius:8px;background:var(--surface2);color:var(--mid);display:flex;align-items:center;justify-content:center;flex-shrink:0">${icn('receipt','',16)}</span>`}
         <span style="min-width:0"><b style="font-size:13px">${esc(e.vendor || (e.category || '').replace('_',' '))}</b>
           <div class="muted" style="font-size:11px">${esc((e.category || '').replace('_',' '))}${e.note ? ' · ' + esc(e.note) : ''} · ${(e.created_at || '').slice(0,10)}${e.paid ? ' · paid' : ''}</div></span></span>
       <span class="money">${fmt(e.amount)}</span></div>`).join('') || '<div class="muted" style="padding:6px 0">No expenses logged on this job.</div>'}
@@ -5451,7 +5488,7 @@ async function pageDealDetail(id){
   </div>` : '';
 
   /* — visits / tasks — */
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dispToday();   // El Paso local date (was UTC — flipped a day every evening)
   const visitsHTML = `<div class="card">
     <div class="row"><div class="lbl" style="margin-bottom:0">Visits &amp; tasks ${dTasks.length > 5 ? `<span class="muted" style="letter-spacing:0;text-transform:none">· ${dTasks.length} — scroll</span>` : ''}</div><a href="#/todo" style="font-size:11.5px;font-weight:700">All tasks &rarr;</a></div>
     <div class="scroll-y" style="max-height:300px">
@@ -5473,8 +5510,8 @@ async function pageDealDetail(id){
       </div>
       <select id="dealTaskWho" onchange="document.getElementById('dealTaskAssignee').value=this.value" style="flex:1;min-width:120px;min-height:38px;padding:7px;font-size:13px">
         <option value="">${lang==='es'?'Para mí':'Assign: Me'}</option>
-        ${dealTeam.filter(p=>p.id!==me.id && p.name).length?`<optgroup label="${lang==='es'?'Equipo':'Team'}">${dealTeam.filter(p=>p.id!==me.id && p.name).map(p=>`<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('')}</optgroup>`:''}
-        ${['ops','admin'].includes(me.role)?`<optgroup label="${lang==='es'?'Cuadrilla':'Crew'}">${TODO_ROSTER.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}</optgroup>`:''}
+        ${dealTeam.filter(p=>p.id!==me.id && p.name).length?`<optgroup label="${lang==='es'?'Equipo':'Team'}">${dealTeam.filter(p=>p.id!==me.id && p.name).map(p=>`<option value="${escAttr(p.name)}">${esc(p.name)}</option>`).join('')}</optgroup>`:''}
+        ${['ops','admin'].includes(me.role)?`<optgroup label="${lang==='es'?'Cuadrilla':'Crew'}">${TODO_ROSTER.map(n=>`<option value="${escAttr(n)}">${esc(n)}</option>`).join('')}</optgroup>`:''}
       </select>
       <input id="dealTaskDue" type="date" style="flex:1;min-width:120px;min-height:38px;padding:7px;font-size:13px">
       <button class="btn btn-ghost btn-sm" style="min-height:38px" onclick="dealTaskAdd('${d.id}')">${lang==='es'?'Agregar':'Add'}</button>
@@ -5498,7 +5535,7 @@ async function pageDealDetail(id){
       <span style="flex:1;min-width:0"><b style="font-size:13.5px">${esc(e.profiles?.name || 'System')}</b>
         <span class="muted" style="font-size:11.5px">${tStamp(e.at)}${e.event && e.event !== 'note' ? ' · ' + esc(e.event) : ''}</span>
         <div style="font-size:14px;font-weight:${e.event && e.event !== 'note' ? '400' : '600'};margin-top:2px;overflow-wrap:anywhere">${esc(e.detail)}</div>
-        ${ph ? `<div class="ev-photos">${ph.map(u => `<img src="${esc(u)}" alt="" loading="lazy">`).join('')}</div>` : ''}</span>
+        ${ph ? `<div class="ev-photos">${ph.map(u => `<img src="${escAttr(u)}" alt="" loading="lazy">`).join('')}</div>` : ''}</span>
     </div>`; }).join('') || '<div class="muted" style="padding:6px 0">No activity yet.</div>'}
     </div>
   </div>`;
@@ -5583,8 +5620,8 @@ async function pageDealDetail(id){
   /* — sidebar: files in the job Drive folder — */
   const filesHTML = d.drive_folder_id ? `<div class="card">
     <div class="row"><div class="lbl" style="margin-bottom:0">Files</div>
-      ${d.drive_folder_url ? `<a class="btn btn-ghost btn-sm" style="text-decoration:none" href="${esc(d.drive_folder_url)}" target="_blank">Open Drive &rarr;</a>` : ''}</div>
-    <div id="dealFilesBox" data-folder="${esc(d.drive_folder_id)}"><div class="muted" style="padding:6px 0;font-size:12.5px">Loading files&hellip;</div></div>
+      ${d.drive_folder_url ? `<a class="btn btn-ghost btn-sm" style="text-decoration:none" href="${escAttr(d.drive_folder_url)}" target="_blank">Open Drive &rarr;</a>` : ''}</div>
+    <div id="dealFilesBox" data-folder="${escAttr(d.drive_folder_id)}"><div class="muted" style="padding:6px 0;font-size:12.5px">Loading files&hellip;</div></div>
   </div>` : '';
 
   /* — sidebar: actions (everything the old modal could do) — */
@@ -5592,13 +5629,13 @@ async function pageDealDetail(id){
     <div style="display:flex;flex-direction:column;gap:8px">
       <button class="btn btn-line btn-sm" style="border-color:var(--terra);color:var(--terra)" onclick="logOutcome('${d.client_id}',{dealId:'${d.id}'})">${icn('check','',15)} ${lang==='es'?'Registrar resultado':'Log outcome'}</button>
       ${dealDivisions(d).includes('solar') ? (d.artemis_proposal_url
-        ? `<a class="btn btn-line btn-sm" style="border-color:var(--terra);color:var(--terra);text-decoration:none" href="${esc(d.artemis_proposal_url)}" target="_blank">${icn('bolt','',15)} Solar proposal${d.artemis_system_size ? ' · ' + d.artemis_system_size + ' kW' : ''}</a>`
+        ? `<a class="btn btn-line btn-sm" style="border-color:var(--terra);color:var(--terra);text-decoration:none" href="${escAttr(d.artemis_proposal_url)}" target="_blank">${icn('bolt','',15)} Solar proposal${d.artemis_system_size ? ' · ' + d.artemis_system_size + ' kW' : ''}</a>`
         : `<button class="btn btn-line btn-sm" style="border-color:var(--terra);color:var(--terra)" id="artBtn" onclick="artemisDesign('${d.id}')">${icn('bolt','',15)} Instant solar design</button>`) : ''}
       ${dealDivisions(d).includes('solar') ? `<button class="btn btn-line btn-sm" style="border-color:var(--terra);color:var(--terra)" onclick="genContract('${d.id}', this)">${icn('file','',15)} Generate contract</button>` : ''}
       ${(dealDivisions(d).includes('solar') && (me.role==='admin' || me.role==='dealer_admin')) ? `<a class="btn btn-hdm btn-sm" href="https://hdmcadmin1.zohocreatorportal.com/" target="_blank" rel="noopener">${icn('bolt','',15)} ${lang==='es'?'Enviar HDM al cliente':'Send HDM to customer'}</a>` : ''}
       <button class="btn btn-line btn-sm" style="border-color:var(--gold);color:var(--gold)" onclick="quoteModal('${d.id}')">${icn('pencil','',15)} Quote / Contract</button>
       <button class="btn btn-line btn-sm" onclick="document.getElementById('photoIn').click()">${icn('camera','',15)} Add photos</button>
-      ${d.drive_folder_url ? `<a class="btn btn-ghost btn-sm" style="text-decoration:none" href="${esc(d.drive_folder_url)}" target="_blank">${icn('folder','',15)} Files (Drive)</a>` : ''}
+      ${d.drive_folder_url ? `<a class="btn btn-ghost btn-sm" style="text-decoration:none" href="${escAttr(d.drive_folder_url)}" target="_blank">${icn('folder','',15)} Files (Drive)</a>` : ''}
       <button class="btn btn-line btn-sm" style="border-color:var(--gold);color:var(--gold)" onclick="sendReview('${d.id}', this)">${icn('star','',15)} Request Google review</button>
       <button class="btn btn-line btn-sm" onclick="editDealModal('${d.id}')">${icn('settings','',15)} Edit deal</button>
     </div>
@@ -5608,7 +5645,7 @@ async function pageDealDetail(id){
   /* — photos (Jobber-style: in-app gallery with date + uploader) — */
   const photosHTML = `<div class="card" id="dealPhotosCard" data-drop-input="dealPhotoIn"><div class="row"><div class="lbl" style="margin-bottom:0">${esq?'Fotos':'Photos'}${photos.length ? ` <span class="muted" style="letter-spacing:0;text-transform:none">· ${photos.length}</span>` : ''}</div>
       <button class="btn btn-terra btn-sm" onclick="document.getElementById('dealPhotoIn').click()">${icn('camera','',14)} ${esq?'Subir fotos':'Add photos'}</button></div>
-    ${photos.length ? `<div class="photo-grid">${photos.map((p,i) => `<div class="photo-cell" onclick="dealPhotoOpen(${i})"><img src="${esc(p.url)}" alt="" loading="lazy"><div class="photo-meta">${esc((p.uploaded_by_name||'').split(' ')[0])} · ${(p.created_at||'').slice(5,10)}</div></div>`).join('')}</div>`
+    ${photos.length ? `<div class="photo-grid">${photos.map((p,i) => `<div class="photo-cell" onclick="dealPhotoOpen(${i})"><img src="${escAttr(p.url)}" alt="" loading="lazy"><div class="photo-meta">${esc((p.uploaded_by_name||'').split(' ')[0])} · ${(p.created_at||'').slice(5,10)}</div></div>`).join('')}</div>`
       : `<div class="muted" style="padding:8px 0;font-size:12.5px">${esq?'Sin fotos todavía — sube desde tu teléfono o compu (varias a la vez).':'No photos yet — upload from your phone or computer (several at once).'}</div>`}
     <input type="file" id="dealPhotoIn" accept="image/*" multiple style="display:none" onchange="uploadDealPhotos('${d.id}', this)">
   </div>`;
@@ -5782,7 +5819,7 @@ function cpRenderItems(){
   const es = lang==='es';
   const host = document.getElementById('cpItems'); if(!host) return;
   host.innerHTML = CP.items.map((it,ix)=>`<div class="row" style="gap:6px;margin-bottom:6px">
-    <input value="${esc(it.description)}" oninput="cpEdit(${ix},'description',this.value)" placeholder="${es?'Descripción':'Description'}" style="flex:2;min-width:0">
+    <input value="${escAttr(it.description)}" oninput="cpEdit(${ix},'description',this.value)" placeholder="${es?'Descripción':'Description'}" style="flex:2;min-width:0">
     <input value="${it.quantity!=null?it.quantity:''}" oninput="cpEdit(${ix},'quantity',this.value)" type="number" inputmode="decimal" placeholder="${es?'Cant.':'Qty'}" style="width:64px">
     <select onchange="cpEdit(${ix},'unit',this.value)" style="width:82px">${cpUnits.map(u=>`<option value="${u}"${u===it.unit?' selected':''}>${u||'—'}</option>`).join('')}</select>
     <span onclick="cpRemoveRow(${ix})" title="${es?'Quitar':'Remove'}" style="cursor:pointer;color:var(--dim);font-size:18px;padding:0 4px;flex-shrink:0">&times;</span>
@@ -5979,7 +6016,7 @@ function hdmDealRender(){
     (phase === 'M1' && (c.category === 'm1' || c.category === 'photos')) ||
     (phase === 'M2' && c.category === 'm2'));
   const cards = (hdmKbAll || []).filter(inPhase).sort((a,b) => (b.is_killer?1:0) - (a.is_killer?1:0));
-  const rows = cards.map(c => `<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="hdmGoCard('${esc(c.slug)}')">
+  const rows = cards.map(c => `<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="hdmGoCard('${escJs(c.slug)}')">
     <span style="display:inline-flex;flex-shrink:0;color:${c.is_killer?'var(--red)':'var(--terra)'}">${icn(c.is_killer?'alert-octagon':'circle-check','',16)}</span>
     <span style="flex:1;min-width:0;font-size:13px;font-weight:600">${esc(es?c.title_es:c.title_en)}${c.is_killer?` <span style="color:var(--red);font-size:9px;font-weight:800;letter-spacing:.5px">• ${es?'CRÍTICO':'KILLER'}</span>`:''}</span>
     <span style="color:var(--dim);font-size:18px;flex-shrink:0">&rsaquo;</span></div>`).join('');
@@ -6064,9 +6101,9 @@ function renderLightbox(){
   const when = p.created_at ? new Date(p.created_at).toLocaleString([], { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' }) : '';
   host.innerHTML = `<div class="lightbox" onclick="if(event.target===this)dealPhotoClose()">
     <div class="lb-bar"><span>${dealLbIdx+1} / ${dealPhotosCache.length}</span>
-      <span style="display:flex;gap:16px;align-items:center"><a href="${esc(p.url)}" target="_blank" rel="noopener" style="color:#fff;text-decoration:none">${es?'Abrir':'Open'} ↗</a><span onclick="dealPhotoDel('${p.id}','${esc(p.storage_path||'')}')" style="cursor:pointer" title="${es?'Eliminar':'Delete'}">${icn('trash','',15)}</span><span onclick="dealPhotoClose()" style="cursor:pointer;font-size:24px;line-height:1">&times;</span></span></div>
+      <span style="display:flex;gap:16px;align-items:center"><a href="${escAttr(p.url)}" target="_blank" rel="noopener" style="color:#fff;text-decoration:none">${es?'Abrir':'Open'} ↗</a><span onclick="dealPhotoDel('${p.id}','${esc(p.storage_path||'')}')" style="cursor:pointer" title="${es?'Eliminar':'Delete'}">${icn('trash','',15)}</span><span onclick="dealPhotoClose()" style="cursor:pointer;font-size:24px;line-height:1">&times;</span></span></div>
     ${dealPhotosCache.length>1 ? `<button class="lb-nav" style="left:12px" onclick="dealPhotoNav(-1)">‹</button><button class="lb-nav" style="right:12px" onclick="dealPhotoNav(1)">›</button>` : ''}
-    <img src="${esc(p.url)}" alt="">
+    <img src="${escAttr(p.url)}" alt="">
     <div class="lb-cap">${esc(p.uploaded_by_name||'')}${when?' · '+when:''}</div></div>`;
 }
 window.dealPhotoDel = async (id, path) => {
@@ -6110,8 +6147,8 @@ window.subPayEdit = async (payId) => {
   subPayForm(p.sub_id, p.deal_id, p);
 };
 window.saveSubPay = async (subId, dealId, payId) => {
-  const amt = parseFloat(document.getElementById('spAmt').value) || 0;
-  if (!amt) { toast(lang==='es'?'Monto requerido':'Amount required'); return; }
+  const amt = Math.round((parseFloat(document.getElementById('spAmt').value) || 0) * 100) / 100;
+  if (!(amt > 0)) { toast(lang==='es'?'El monto debe ser mayor que 0':'Amount must be greater than 0'); return; }
   const row = { sub_id: subId, deal_id: dealId, amount: amt, paid_at: document.getElementById('spDate').value || null, method: (document.getElementById('spMethod').value||'').trim() || null, note: (document.getElementById('spNote').value||'').trim() || null };
   let error;
   if (payId) { ({ error } = await sb.from('deal_sub_payments').update(row).eq('id', payId)); }
@@ -6119,7 +6156,7 @@ window.saveSubPay = async (subId, dealId, payId) => {
   if (error) { toast(error.message); return; }
   document.querySelector('.modal-scrim')?.remove();
   toast(lang==='es'?(payId?'Pago actualizado':'Pago registrado'):(payId?'Payment updated':'Payment recorded'));
-  if (window.chatCtx && chatCtx.dealId) openDeal(chatCtx.dealId); else render();
+  if (dealId) openDeal(dealId); else render();
 };
 window.subPayDel = async (payId) => {
   if (!confirm(lang==='es'?'¿Eliminar este pago?':'Delete this payment?')) return;
@@ -6127,7 +6164,7 @@ window.subPayDel = async (payId) => {
   if (error) { toast(error.message); return; }
   document.querySelector('.modal-scrim')?.remove();
   toast(lang==='es'?'Pago eliminado':'Payment deleted');
-  if (window.chatCtx && chatCtx.dealId) openDeal(chatCtx.dealId); else render();
+  render();   // (was a dead window.chatCtx branch that never fired; render re-draws the current deal page)
 };
 window.subDel = async (id) => {
   if (!confirm(lang==='es'?'¿Eliminar este contratista y sus pagos?':'Delete this contractor and its payments?')) return;
@@ -6281,8 +6318,8 @@ window.editDealModal = async (id) => {
       </div>
       <div class="lbl">Co-borrower / co-owner <span class="muted" style="text-transform:none;letter-spacing:0">— only if a second person is on the loan or title</span></div>
       <div class="grid g2" style="margin-bottom:14px">
-        <div><input id="edCoName" placeholder="Co-borrower name" value="${esc(d.co_borrower_name || '')}"></div>
-        <div><input id="edCoEmail" type="email" placeholder="Co-borrower email" value="${esc(d.co_borrower_email || '')}"></div>
+        <div><input id="edCoName" placeholder="Co-borrower name" value="${escAttr(d.co_borrower_name || '')}"></div>
+        <div><input id="edCoEmail" type="email" placeholder="Co-borrower email" value="${escAttr(d.co_borrower_email || '')}"></div>
       </div>
       <div class="lbl">Pipelines <span class="muted" style="text-transform:none;letter-spacing:0">— a job on both boards moves on each one independently</span></div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">${divBoxesHTML('ed', dealDivisions(d), divPrimary(d))}</div>
@@ -6558,6 +6595,11 @@ window._solarPvUrl = null; window._solarPvName = '';
 window._solarPvEsc = (e) => { if (e.key === 'Escape') solarPreviewClose(); };
 window.solarPreviewClose = () => {
   const P = _solarPending; _solarPending = null;
+  // Abandoned preview (send nulls _solarPending first, so reaching here means nothing was sent):
+  // undo the sale_price bump that the preview wrote, so merely previewing never mutates the deal's money.
+  if (P && P.dealId && P.prevPrice !== undefined && P.prevPrice !== P.total) {
+    sb.from('deals').update({ sale_price: P.prevPrice }).eq('id', P.dealId).then(()=>{}, ()=>{});
+  }
   _solarCancelDraft(P);
   try { if (window._solarPvUrl) URL.revokeObjectURL(window._solarPvUrl); } catch(_){}
   window._solarPvUrl = null;
@@ -6705,6 +6747,7 @@ window._solarSignModal = (j) => {
 
 window.artemisDesign = async (id, after) => {
   const d = dealsCache.find(x => x.id === id);
+  if (!d) { toast(lang==='es'?'Trabajo no encontrado — actualiza la página':'Deal not found — refresh the page'); return; }
   if (!d.clients?.email) { toast('Client needs an email first'); return; }
   if (!d.properties?.address) { toast('Job needs a property address first'); return; }
   const bill = prompt('Customer\'s average monthly electric bill ($)?', '200');
@@ -6776,6 +6819,7 @@ window.moveDealTo = async (id, targetIdx, opts = {}) => {
 
 window.advanceDeal = async (id, division) => {
   const d = dealsCache.find(x => x.id === id);
+  if (!d) { toast(lang==='es'?'Trabajo no encontrado — actualiza la página':'Deal not found — refresh the page'); return; }
   const div = division && dealDivisions(d).includes(division) ? division : divPrimary(d);
   const t = divTrack(d, div);
   const nextIdx = Math.min(t.idx + 1, t.stages.length - 1);
@@ -6957,7 +7001,7 @@ window.dealMentionCheck = async () => {
   const q = m[1].toLowerCase();
   const opts = (isHouse() ? [{ name: 'Claudio', role: 'AI assistant' }] : []).concat(chatPeople.filter(p => p.id !== me.id))
     .filter(p => !q || p.name.toLowerCase().startsWith(q) || (p.name === 'Claudio' && 'ai'.startsWith(q)));
-  box.innerHTML = opts.slice(0, 6).map(p => `<div onclick="pickDealMention('${esc(p.name)}')">${p.name === 'Claudio' ? icn('sparkles','',13) + ' ' : ''}${esc(p.name)} <span class="muted" style="font-size:11px">${esc(p.role)}</span></div>`).join('');
+  box.innerHTML = opts.slice(0, 6).map(p => `<div onclick="pickDealMention('${escJs(p.name)}')">${p.name === 'Claudio' ? icn('sparkles','',13) + ' ' : ''}${esc(p.name)} <span class="muted" style="font-size:11px">${esc(p.role)}</span></div>`).join('');
   box.style.display = opts.length ? 'block' : 'none';
 };
 window.pickDealMention = (name) => {
@@ -7086,7 +7130,7 @@ window.showNotifs = async () => {
       <div class="row"><h1 class="page" style="font-size:24px">${es?'Notificaciones':'Notifications'}<em>.</em></h1>
         ${(ns||[]).some(n => !n.read) ? `<button class="btn btn-line btn-sm" onclick="markAllNotifs()">${es?'Marcar leídas':'Mark all read'}</button>` : ''}</div>
       ${pushOff ? `<button class="btn btn-terra btn-sm" style="width:100%;margin-bottom:10px" onclick="enablePush().then(()=>document.querySelector('.modal-scrim')?.remove())">${icn('bell','',14)} ${es?'Activar push en este dispositivo':'Turn on push on this device'}</button>` : ''}
-      ${(ns||[]).map(n => `<div onclick="openNotif('${n.id}','${n.deal_id || ''}','${esc(n.url||'')}','${n.type||''}')" style="padding:9px 6px;border-bottom:1px solid var(--border);cursor:pointer;${n.read ? 'opacity:.55' : ''}">
+      ${(ns||[]).map(n => `<div onclick="openNotif('${escJs(n.id)}','${escJs(n.deal_id || '')}','${escJs(n.url||'')}','${escJs(n.type||'')}')" style="padding:9px 6px;border-bottom:1px solid var(--border);cursor:pointer;${n.read ? 'opacity:.55' : ''}">
         ${n.read ? '' : '<span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:var(--terra);margin-right:6px"></span>'}
         <span style="margin-right:5px;color:var(--mid)">${notifIcn(n.type,15)}</span><b style="font-size:13px">${esc(n.by_name || '')}</b> <span class="muted" style="font-size:11px">${tStamp(n.created_at)}</span>
         <div style="font-size:13px;margin-top:2px">${esc(n.text)}</div>
@@ -7400,7 +7444,7 @@ function renderChatHeader(){
     return;
   }
   if (chatMode === 'dm' && dmWith) {
-    head.innerHTML = `<div class="row" style="gap:8px"><b style="font-family:var(--serif);font-size:17px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(dmWith.name)}</b><span class="chat-switch" onclick="chatHome()">&larr; Chats</span></div><div class="muted" style="font-size:11px"><span class="dm-pres" data-uid="${esc(String(dmWith.id))}" data-off="${lang==='es'?'Mensaje privado':'Private message'}">${lang==='es'?'Mensaje privado':'Private message'}</span></div>`;
+    head.innerHTML = `<div class="row" style="gap:8px"><b style="font-family:var(--serif);font-size:17px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(dmWith.name)}</b><span class="chat-switch" onclick="chatHome()">&larr; Chats</span></div><div class="muted" style="font-size:11px"><span class="dm-pres" data-uid="${escAttr(String(dmWith.id))}" data-off="${lang==='es'?'Mensaje privado':'Private message'}">${lang==='es'?'Mensaje privado':'Private message'}</span></div>`;
     try{ paintPresence(); }catch(_){}
     return;
   }
@@ -7528,7 +7572,7 @@ function chatAttHTML(m) {
     return `<img src="${escAttr(url)}" alt="${escAttr(m.attachment_name||'')}" data-lb="${escAttr(url)}" onclick="msgLightbox(this.dataset.lb)" style="max-width:188px;max-height:210px;border-radius:11px;margin-top:4px;display:block;cursor:zoom-in">`;
   if (t.startsWith('audio/'))
     return vmHTML(url);
-  return `<a href="${url}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;margin-top:5px;color:var(--terra);font-weight:600;text-decoration:none">${icn('paperclip','',13)} ${esc(m.attachment_name||'file')}</a>`;
+  return `<a href="${escAttr(url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;margin-top:5px;color:var(--terra);font-weight:600;text-decoration:none">${icn('paperclip','',13)} ${esc(m.attachment_name||'file')}</a>`;
 }
 /* ── WhatsApp-style media: in-app lightbox, inline voice player, mic recording ── */
 const VM_PLAY = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13 -8z"/></svg>';
@@ -7543,7 +7587,7 @@ window.msgLightbox = (url) => {
   document.body.appendChild(ov);
 };
 function vmBars(seed){ let h = 0; for (let i=0;i<seed.length;i++) h = (h*31 + seed.charCodeAt(i)) >>> 0; let out=''; for (let i=0;i<32;i++){ h = (h*1103515245 + 12345) >>> 0; out += `<span class="vm-bar" style="height:${18 + (h % 80)}%"></span>`; } return out; }
-function vmHTML(url){ return `<div class="voice-msg" data-url="${url}"><button class="vm-play" onclick="msgPlayVoice(this)" aria-label="Play">${VM_PLAY}</button><div class="vm-wave">${vmBars(url)}</div><span class="vm-time">0:00</span></div>`; }
+function vmHTML(url){ return `<div class="voice-msg" data-url="${escAttr(url)}"><button class="vm-play" onclick="msgPlayVoice(this)" aria-label="Play">${VM_PLAY}</button><div class="vm-wave">${vmBars(url)}</div><span class="vm-time">0:00</span></div>`; }
 function vmReset(box){ if(!box) return; const b=box.querySelector('.vm-play'); if(b) b.innerHTML=VM_PLAY; box.querySelectorAll('.vm-bar').forEach(x=>x.classList.remove('played')); const t=box.querySelector('.vm-time'); if(t) t.textContent='0:00'; }
 window.msgPlayVoice = (btn) => {
   const box = btn.closest('.voice-msg'); if(!box) return; const url = box.dataset.url;
@@ -7690,7 +7734,7 @@ window.chatMentionCheck = async () => {
   const q = m[1].toLowerCase();
   const opts = (isHouse() ? [{ name: 'Claudio', role: 'AI assistant' }] : []).concat(chatPeople.filter(p => p.id !== me.id))
     .filter(p => !q || p.name.toLowerCase().startsWith(q) || (p.name === 'Claudio' && 'ai'.startsWith(q)));
-  box.innerHTML = opts.slice(0, 6).map(p => `<div onclick="pickMention('${esc(p.name)}')">${p.name === 'Claudio' ? icn('sparkles','',13) + ' ' : ''}${esc(p.name)} <span class="muted" style="font-size:11px">${esc(p.role)}</span></div>`).join('');
+  box.innerHTML = opts.slice(0, 6).map(p => `<div onclick="pickMention('${escJs(p.name)}')">${p.name === 'Claudio' ? icn('sparkles','',13) + ' ' : ''}${esc(p.name)} <span class="muted" style="font-size:11px">${esc(p.role)}</span></div>`).join('');
   box.style.display = opts.length ? 'block' : 'none';
 };
 window.pickMention = (name) => {
@@ -7777,7 +7821,7 @@ window.msgForward = (id) => {
   const targets=(msgConvos||[]).filter(c=> (c.kind==='team'||c.kind==='dm'||c.kind==='group') && !c.isClaudio && !(msgActive && c.kind===msgActive.kind && String(c.id)===String(msgActive.id)));
   const wrap=document.createElement('div'); wrap.className='modal-scrim'; wrap.style.zIndex='2000';  // above the z-1000 full-screen thread
   wrap.onclick=(e)=>{ if(e.target===wrap) wrap.remove(); };
-  const rows=targets.map(c=>`<div onclick="msgForwardTo('${esc(id)}','${c.kind}','${esc(String(c.id))}',this)" style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;cursor:pointer" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+  const rows=targets.map(c=>`<div onclick="msgForwardTo('${escJs(id)}','${escJs(c.kind)}','${escJs(String(c.id))}',this)" style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;cursor:pointer" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
       <div class="msg-av" style="width:34px;height:34px;font-size:12px;flex-shrink:0;background:${c.color||msgColor(c.name)}">${c.kind==='team'?'#':c.isGroup?icn('users','',16):esc(msgInitials(c.name))}</div>
       <div style="min-width:0"><div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.name)}</div>${c.sub?`<div class="muted" style="font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.sub)}</div>`:''}</div>
     </div>`).join('');
@@ -8344,25 +8388,27 @@ window.msgSend = async () => {
   if(!text && !msgAtt && !refs.length) return;
   let att=null; try{ att=await msgUploadFile(); }catch(_){ return; }
   msgAttClear(); msgCloseEmoji(); msgClosePlus(); inp.value=''; inp.style.height='auto'; const mm=document.getElementById('msgMention'); if(mm) mm.style.display='none'; msgRefs=[]; msgRenderRefs(); msgSyncSend();
+  // If the send fails, put the typed text and tags back so the user doesn't silently lose them.
+  const restoreDraft = () => { inp.value = text; try{ inp.style.height='auto'; }catch(_){}; msgRefs = refs.slice(); msgRenderRefs(); msgSyncSend(); };
   if(msgActive.kind==='deal'){
     const dealId=msgActive.id;
     const fileUrl = att ? sb.storage.from('chat-files').getPublicUrl(att.attachment_path).data.publicUrl : '';
     const dealText=(text+(fileUrl?(text?'\n':'')+fileUrl:'')).trim();
     const r=await postDealNote(dealId, dealText);
-    if(r==='err') return;
+    if(r==='err'){ restoreDraft(); return; }
     msgLoadThread();
     if(r==='ai') [8000,16000].forEach(t=>setTimeout(()=>{ if(msgActive&&msgActive.kind==='deal'&&String(msgActive.id)===String(dealId)) msgLoadThread(); },t));
   } else if(msgActive.kind==='dm'){
     const toClaudio = isHouse() && String(msgActive.id)===CLAUDIO_ID;
     const { error }=await sb.from('dm_messages').insert({ sender_id:me.id, recipient_id:msgActive.id, text, refs, ai_request:toClaudio, ...(att||{}) });
-    if(error){ toast(error.message); return; }
+    if(error){ toast(error.message); restoreDraft(); return; }
     if(toClaudio){ wakeClaudio(text); const oid=msgActive.id; [3000,6000,10000,16000,24000].forEach(t=>setTimeout(()=>{ if(msgActive&&msgActive.kind==='dm'&&String(msgActive.id)===String(oid)) msgLoadThread(); },t)); }
     else { sb.from('notifications').insert({ user_id:msgActive.id, type:'mention', url:'/crm.html#/messages/dm/'+me.id, text:'DM · '+me.name+': '+(text?text.slice(0,200):''+(att?.attachment_name||'file')), by_name:me.name }).then(()=>{},()=>{}); }
     msgLoadThread();
   } else if(msgActive.kind==='group'){
     const aiReq = isHouse() && /@(ai|claudio)\b/i.test(text);
     const { error }=await sb.from('group_messages').insert({ group_id:msgActive.id, sender_id:me.id, by_name:me.name, text, refs, ai_request:aiReq, ...(att||{}) });
-    if(error){ toast(error.message); return; }
+    if(error){ toast(error.message); restoreDraft(); return; }
     try{
       const g=msgGroups.find(x=>String(x.id)===String(msgActive.id));
       const others=((g&&g.members)||[]).filter(id=>id!==me.id);
@@ -8396,7 +8442,7 @@ window.msgMentionCheck = async () => {
     await loadChatPeople(); const q=mAt[1].toLowerCase();
     const people = chatPeople.filter(p=>p.id!==me.id);
     const opts=(isHouse()?[{name:'Claudio',role:'AI assistant'}]:[]).concat(people).filter(p=>!q||p.name.toLowerCase().startsWith(q)||(p.name==='Claudio'&&'ai'.startsWith(q)));
-    box.innerHTML=opts.slice(0,6).map(p=>`<div onclick="msgPickMention('${esc(p.name)}')">${p.name==='Claudio'?icn('sparkles','',13)+' ':''}${esc(p.name)} <span class="muted" style="font-size:11px">${esc(p.role||'')}</span></div>`).join('');
+    box.innerHTML=opts.slice(0,6).map(p=>`<div onclick="msgPickMention('${escJs(p.name)}')">${p.name==='Claudio'?icn('sparkles','',13)+' ':''}${esc(p.name)} <span class="muted" style="font-size:11px">${esc(p.role||'')}</span></div>`).join('');
     box.style.display=opts.length?'block':'none'; return;
   }
   // # jobs — tag a job/job
@@ -8449,9 +8495,9 @@ window.msgMakeJob=(clientId)=>{ if(window.newDealModal) window.newDealModal(clie
 function refsChips(refs){
   if(!refs || !refs.length) return '';
   return '<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:5px">'+refs.map(r=>{
-    const href=r.type==='deal'?('#/deal/'+r.id):r.type==='client'?('#/client/'+r.id):'';
+    const href=r.type==='deal'?('#/deal/'+encodeURIComponent(r.id)):r.type==='client'?('#/client/'+encodeURIComponent(r.id)):'';
     const ic=r.type==='deal'?'diamond':'user'; const inner=`${icn(ic,'',12)} ${esc((r.type==='deal'?'#':'')+(r.label||''))}`;
-    return href?`<a href="${href}" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;border:1px solid var(--border);background:rgba(127,127,127,.12);font-size:11px;font-weight:700;color:inherit;text-decoration:none">${inner}</a>`:`<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;border:1px solid var(--border);font-size:11px;font-weight:700">${inner}</span>`;
+    return href?`<a href="${escAttr(href)}" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;border:1px solid var(--border);background:rgba(127,127,127,.12);font-size:11px;font-weight:700;color:inherit;text-decoration:none">${inner}</a>`:`<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;border:1px solid var(--border);font-size:11px;font-weight:700">${inner}</span>`;
   }).join('')+'</div>';
 }
 // quick "new contact" from the chat (Silvia's flow — phone call → real contact, tagged in the room)
@@ -8586,7 +8632,7 @@ async function pageClients(){
       <button class="btn btn-terra btn-sm" onclick="newClientModal()">+ ${es?'Nuevo contacto':'New Contact'}</button></div>
     <div class="eyebrow" id="cCount">${clientsCache.length} ${es?'en total':'on file'}</div>
     <div class="filterbar">
-      <div class="fb-search">${icn('search','',15)}<input id="cSearch" type="search" autocomplete="off" value="${esc(contactFilter.q||'')}" placeholder="${es?'Filtra por nombre, teléfono, correo, dirección…':'Filter by name, phone, email, address…'}" oninput="contactFilterSet('q',this.value)"></div>
+      <div class="fb-search">${icn('search','',15)}<input id="cSearch" type="search" autocomplete="off" value="${escAttr(contactFilter.q||'')}" placeholder="${es?'Filtra por nombre, teléfono, correo, dirección…':'Filter by name, phone, email, address…'}" oninput="contactFilterSet('q',this.value)"></div>
       <div class="seg" id="cSeg">${segs.map(([k,l])=>`<button data-seg="${k}" class="${contactFilter.seg===k?'on':''}" onclick="contactFilterSet('seg','${k}')">${l}</button>`).join('')}</div>
       <select class="fb-sort" onchange="contactFilterSet('sort',this.value)">
         <option value="recent"${contactFilter.sort==='recent'?' selected':''}>${es?'Recientes':'Recent'}</option>
@@ -8737,12 +8783,14 @@ async function pageClientDetail(id){
           <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
             ${c.phone?`<a class="btn btn-line btn-sm" style="text-decoration:none" href="tel:${esc(telDigits)}" onclick="touchContact('${c.id}')">${es?'Llamar':'Call'} ${esc(fmtPhone(c.phone))}</a>`:''}
             ${c.phone?`<a class="btn btn-line btn-sm" style="text-decoration:none" href="sms:${esc(telDigits)}" onclick="touchContact('${c.id}')">${es?'Texto':'Text'}</a>`:''}
-            ${c.email?`<a class="btn btn-line btn-sm" style="text-decoration:none" href="mailto:${esc(c.email)}" title="${esc(c.email)}" onclick="touchContact('${c.id}')">${icn('mail','',13)} ${es?'Correo':'Email'}</a>`:''}
+            ${c.email?`<a class="btn btn-line btn-sm" style="text-decoration:none" href="mailto:${esc(c.email)}" title="${escAttr(c.email)}" onclick="touchContact('${c.id}')">${icn('mail','',13)} ${es?'Correo':'Email'}</a>`:''}
           </div>
         </div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start">${['ops','admin'].includes(me.role)
-        ? `<button class="btn btn-terra btn-sm" onclick="location.hash='#/deals';setTimeout(()=>newDealModal('${c.id}'),400)">${icn('diamond','',15)} ${es?'Nuevo trabajo':'New job'}</button>`
+        ? (cDeals.length
+            ? `<button class="btn btn-terra btn-sm" onclick="${cDeals.length===1 ? `openDeal('${cDeals[0].id}')` : `clientTab('work')`}">${icn('diamond','',15)} ${cDeals.length===1 ? (es?'Ir al trabajo':'Go to job') : (es?('Ver trabajos ('+cDeals.length+')'):('View jobs ('+cDeals.length+')'))}</button>`
+            : `<button class="btn btn-terra btn-sm" onclick="location.hash='#/deals';setTimeout(()=>newDealModal('${c.id}'),400)">${icn('diamond','',15)} ${es?'Nuevo trabajo':'New job'}</button>`)
         : `<button class="btn btn-terra btn-sm" onclick="contactQuote('${c.id}')">${icn('pencil','',15)} ${es?'Nueva cotización':'New quote'}</button>`}${['ops','admin'].includes(me.role)?`<button class="btn btn-line btn-sm" style="color:var(--red);border-color:var(--red)" onclick="archiveClient('${c.id}')">${icn('trash','',14)} ${es?'Eliminar':'Delete'}</button>`:''}</div>
     </div>
     <div class="ctabs">
@@ -8755,8 +8803,8 @@ async function pageClientDetail(id){
     </div>
     <div class="ctab-pane" data-tab="client">
       <div class="card"><div class="lbl">${es?'Información de contacto':'Contact info'}</div>
-        <div class="grid g2" style="margin-bottom:10px"><input id="ecFirst" value="${esc(firstName)}" placeholder="${es?'Nombre':'First name'}"><input id="ecLast" value="${esc(lastName)}" placeholder="${es?'Apellido':'Last name'}"></div>
-        <div class="grid g2" style="margin-bottom:10px"><input id="ecPhone" value="${esc(c.phone || '')}" inputmode="tel" placeholder="${es?'Teléfono':'Phone'}" oninput="fmtPhoneLive(this)" onblur="this.value=fmtPhone(this.value)"><input id="ecEmail" type="email" value="${esc(c.email || '')}" placeholder="${es?'Correo':'Email'}"></div>
+        <div class="grid g2" style="margin-bottom:10px"><input id="ecFirst" value="${escAttr(firstName)}" placeholder="${es?'Nombre':'First name'}"><input id="ecLast" value="${escAttr(lastName)}" placeholder="${es?'Apellido':'Last name'}"></div>
+        <div class="grid g2" style="margin-bottom:10px"><input id="ecPhone" value="${escAttr(c.phone || '')}" inputmode="tel" placeholder="${es?'Teléfono':'Phone'}" oninput="fmtPhoneLive(this)" onblur="this.value=fmtPhone(this.value)"><input id="ecEmail" type="email" value="${escAttr(c.email || '')}" placeholder="${es?'Correo':'Email'}"></div>
         <button class="btn btn-terra btn-sm" onclick="saveClient('${c.id}')">${es?'Guardar':'Save info'}</button>
       </div>
       <div class="card"><div class="lbl">${lang==='es'?'Seguimiento del prospecto':'Lead follow-up'}</div>
@@ -8825,10 +8873,10 @@ async function pageClientDetail(id){
     </div>
     <div class="ctab-pane" data-tab="files" style="display:none">
       ${crmFilesCard('client', c.id, cfiles)}
-      ${cDeals.filter(d => d.drive_folder_url).length ? `<div class="card"><div class="lbl">${lang==='es'?'Carpetas de Drive':'Job Drive folders'}</div>${cDeals.filter(d => d.drive_folder_url).map(d => `<div style="padding:7px 0;border-bottom:1px solid var(--border);font-size:13px"><a href="${esc(d.drive_folder_url)}" target="_blank">${icn('folder','',14)} ${esc(d.deal_code || 'Job')} — Drive folder</a></div>`).join('')}</div>` : ''}
+      ${cDeals.filter(d => d.drive_folder_url).length ? `<div class="card"><div class="lbl">${lang==='es'?'Carpetas de Drive':'Job Drive folders'}</div>${cDeals.filter(d => d.drive_folder_url).map(d => `<div style="padding:7px 0;border-bottom:1px solid var(--border);font-size:13px"><a href="${escAttr(d.drive_folder_url)}" target="_blank">${icn('folder','',14)} ${esc(d.deal_code || 'Job')} — Drive folder</a></div>`).join('')}</div>` : ''}
     </div>
     <div class="ctab-pane" data-tab="email" style="display:none">
-      <div style="margin-bottom:12px">${c.email ? `<button class="btn btn-terra btn-sm" onclick="emailCompose('${esc(c.email)}')">${icn('pencil','',13)} Email ${esc(c.name)}</button>` : '<span class="muted" style="font-size:12px">Add an email address above to send mail to this contact.</span>'}</div>
+      <div style="margin-bottom:12px">${c.email ? `<button class="btn btn-terra btn-sm" onclick="emailCompose('${escJs(c.email)}')">${icn('pencil','',13)} Email ${esc(c.name)}</button>` : '<span class="muted" style="font-size:12px">Add an email address above to send mail to this contact.</span>'}</div>
       <div id="clientEmails" class="muted">Loading&hellip;</div>
       <div id="clientEmailReader" style="margin-top:12px"></div>
     </div>
@@ -8871,9 +8919,13 @@ window.createClient = async () => {
   const last = (document.getElementById('cLast')?.value || '').trim();
   const name = (first + ' ' + last).trim();
   if (!name) { toast(lang==='es'?'Falta el nombre':'First name required'); return; }
+  const addr = document.getElementById('cAddr').value.trim();
+  if (addr) {   // same duplicate-address guard the lead/deal flows use — don't create a second contact on an address already in use
+    const dup = await crmAddrInUse(addr);
+    if (dup && dup.found) { crmDupBlock(dup, addr); return; }
+  }
   const { data: c, error } = await sb.from('clients').insert({ name, phone: document.getElementById('cPhone').value.trim(), email: document.getElementById('cEmail').value.trim(), source: document.getElementById('cSource')?.value || null, notes: (document.getElementById('cNotes')?.value || '').trim() || null, created_by: me.id }).select().single();
   if (error) { toast(error.message); return; }
-  const addr = document.getElementById('cAddr').value.trim();
   if (addr) await sb.from('properties').insert({ client_id: c.id, address: addr });
   // uploaded files attach to the contact (client_id) → they follow the lead into every job
   if (newClientFiles.length) {
@@ -9014,7 +9066,7 @@ async function pageFollowups(){
   const seqMap = {}; (sq.data||[]).forEach(s=>seqMap[s.key]=s.active);
   const fcfg = (fq.data && fq.data.value) || {};
   const boardClients = bq.data || [];
-  const now = new Date(), today = now.toISOString().slice(0,10);
+  const now = new Date(), today = dispToday();   // El Paso local date — keeps Board/Mine follow-up tabs consistent
 
   const myLeads = allLeads.filter(l => l.owner_id===me.id);
   const dueNow = myLeads.filter(l => !l.next_follow_up_at || new Date(l.next_follow_up_at) <= now)
@@ -9581,7 +9633,7 @@ window.pcSelect = (i) => {
   if (!p || !host) return;
   const es = lang === 'es';
   const hasApply = !!LENDER_APPLY[p.bank];
-  host.innerHTML = `<div class="card" ${hasApply ? `onclick="pcApply('${esc(p.bank)}')"` : ''} style="border:2px solid var(--terra);border-radius:12px;text-align:center;padding:38px 20px;margin-bottom:16px;${hasApply ? 'cursor:pointer' : ''}">
+  host.innerHTML = `<div class="card" ${hasApply ? `onclick="pcApply('${escJs(p.bank)}')"` : ''} style="border:2px solid var(--terra);border-radius:12px;text-align:center;padding:38px 20px;margin-bottom:16px;${hasApply ? 'cursor:pointer' : ''}">
     <div style="line-height:1;color:var(--terra)">${icn('circle-check','',44)}</div>
     <div class="lbl" style="margin-top:10px">${es?'Tu plan':'Your plan'} — ${esc(p.bank)}</div>
     <div class="money" style="font-size:56px;line-height:1.05">$${p.monthly.toFixed(2)}<span style="font-size:18px;color:var(--mid)">/${es?'mes':'mo'}</span></div>
@@ -9621,7 +9673,10 @@ function qCompute(){
   const afterDisc = Math.max(0, sub - disc);
   const tax = qTax>0 ? afterDisc*(qTax/100) : 0;
   const optional = qItems.filter(it=>it.optional).reduce((a,it)=> a + (+it.qty||0)*(+it.price||0), 0);
-  return { sub, disc, tax, total: afterDisc + tax, optional };
+  // Round every money value to whole cents so stored quote/contract totals aren't binary-float
+  // artifacts like 1234.5600000000002 (which flow verbatim into quotes.total and SignWell).
+  const r2 = n => Math.round((+n||0)*100)/100;
+  return { sub:r2(sub), disc:r2(disc), tax:r2(tax), total:r2(afterDisc + tax), optional:r2(optional) };
 }
 window.newQuoteModal = async () => { // standalone = Home-Improvement quote for a CONTACT
   const { data } = await sb.from('clients').select('id,name,email,phone,properties(id,address)').order('name');
@@ -9765,9 +9820,9 @@ window.quoteModal = async (arg, preItems, existing) => {
       <div class="muted" style="margin-bottom:10px">${contactMode ? (qHiMode ? (es?'Mejoras al hogar':'Home improvement') : 'Solar') : esc(d.deal_code)} · ${qSubtitle}</div>
       <div class="card" style="padding:12px;margin-bottom:12px;background:var(--surface2)">
         <div class="lbl" style="margin-bottom:8px">${es?'Cliente':'Customer'} <span class="muted" style="text-transform:none;letter-spacing:0">— ${es?'corrige aquí antes de mandar a firmar':'fix it here before you send to sign'}</span></div>
-        <div class="grid g2" style="margin-bottom:8px"><input id="qcFirst" placeholder="${es?'Nombre':'First name'}" value="${esc(_cFirst)}"><input id="qcLast" placeholder="${es?'Apellido':'Last name'}" value="${esc(_cLast)}"></div>
-        <div class="grid g2" style="margin-bottom:8px"><input id="qcPhone" inputmode="tel" placeholder="(915) 233-2222" oninput="fmtPhoneLive(this)" onblur="this.value=fmtPhone(this.value)" value="${esc(fmtPhone(_cust.phone||''))}"><input id="qcEmail" type="email" placeholder="${es?'Correo (requerido para firmar)':'Email (required to sign)'}" value="${esc(_cust.email||'')}" onblur="qcEmailCheck()"></div>
-        <div><input id="qcAddr" placeholder="${es?'Dirección — autocompletar Google':'Address — Google autocomplete'}" value="${esc(_cAddr)}"></div>
+        <div class="grid g2" style="margin-bottom:8px"><input id="qcFirst" placeholder="${es?'Nombre':'First name'}" value="${escAttr(_cFirst)}"><input id="qcLast" placeholder="${es?'Apellido':'Last name'}" value="${escAttr(_cLast)}"></div>
+        <div class="grid g2" style="margin-bottom:8px"><input id="qcPhone" inputmode="tel" placeholder="(915) 233-2222" oninput="fmtPhoneLive(this)" onblur="this.value=fmtPhone(this.value)" value="${escAttr(fmtPhone(_cust.phone||''))}"><input id="qcEmail" type="email" placeholder="${es?'Correo (requerido para firmar)':'Email (required to sign)'}" value="${escAttr(_cust.email||'')}" onblur="qcEmailCheck()"></div>
+        <div><input id="qcAddr" placeholder="${es?'Dirección — autocompletar Google':'Address — Google autocomplete'}" value="${escAttr(_cAddr)}"></div>
         <div id="qcEmailWarn" class="muted" style="color:var(--red);font-size:11.5px;margin-top:6px"></div>
       </div>
       ${isSolar ? (d.artemis_proposal_url
@@ -9788,7 +9843,7 @@ window.quoteModal = async (arg, preItems, existing) => {
       ${(qHiMode || isSolar) ? `<div class="lbl" style="margin-top:6px">${es?'Financiamiento':'Financing'} <span class="muted" style="text-transform:none;letter-spacing:0">(${es?'opcional — sale en el contrato':'optional — prints on the contract'})</span></div>
       <div class="card" style="padding:12px;margin-bottom:12px;background:var(--surface2)">
         <div class="grid g2" style="gap:8px;margin-bottom:8px">
-          <input id="qFinCo" placeholder="${es?'Financiera (TGUC, Salal…)':'Financing company (TGUC, Salal…)'}" value="${esc(qFin.company||'')}" oninput="qFinSet('company',this.value)">
+          <input id="qFinCo" placeholder="${es?'Financiera (TGUC, Salal…)':'Financing company (TGUC, Salal…)'}" value="${escAttr(qFin.company||'')}" oninput="qFinSet('company',this.value)">
           <input id="qFinApr" type="number" inputmode="decimal" placeholder="APR %" value="${qFin.apr||''}" oninput="qFinSet('apr',this.value)">
           <input id="qFinTerm" type="number" inputmode="numeric" placeholder="${es?'Plazo (meses)':'Term (months)'}" value="${qFin.term||''}" oninput="qFinSet('term',this.value)">
           <input id="qFinDown" type="number" inputmode="decimal" placeholder="${es?'Enganche $':'Down payment $'}" value="${qFin.down||''}" oninput="qFinSet('down',this.value)">
@@ -9841,7 +9896,7 @@ async function qcSyncCustomer(){
 function qRow(it, i){
   const lt = (+it.qty||0) * (+it.price||0);
   return `<div style="border:1px solid var(--border);border-radius:9px;padding:8px;margin-bottom:7px;${it.optional?'border-style:dashed':''}">
-      <input value="${esc(it.desc)}" oninput="qSet(${i},'desc',this.value)" placeholder="${lang==='es'?'Descripción del concepto':'Item description'}" style="width:100%;min-height:38px;padding:8px 10px;font-size:13px;margin-bottom:6px">
+      <input value="${escAttr(it.desc)}" oninput="qSet(${i},'desc',this.value)" placeholder="${lang==='es'?'Descripción del concepto':'Item description'}" style="width:100%;min-height:38px;padding:8px 10px;font-size:13px;margin-bottom:6px">
       <div style="display:grid;grid-template-columns:54px 92px 1fr auto;gap:6px;align-items:center">
         <input type="number" inputmode="decimal" value="${it.qty}" oninput="qSet(${i},'qty',this.value)" title="${lang==='es'?'Cantidad':'Qty'}" style="min-height:34px;padding:6px;font-size:12.5px">
         <input type="number" inputmode="decimal" value="${it.price}" oninput="qSet(${i},'price',this.value)" title="${lang==='es'?'Precio unitario':'Unit price'}" style="min-height:34px;padding:6px;font-size:12.5px">
@@ -10092,7 +10147,7 @@ window.sendContract = async (inPerson) => {
       }
       d.sale_price = total;   // keep local state in sync with the confirmed write
       // stash everything solarSendNow() needs to do the real send when the office confirms
-      _solarPending = { dealId: d.id, clientId: d.client_id,
+      _solarPending = { dealId: d.id, clientId: d.client_id, prevPrice,
         hi_scope: __hiScope, qNum, total, sub: c.sub, qItems: qItems.map(it => ({ ...it })), qEditId,
         disc: qDisc.value>0 ? { type:qDisc.type, value:qDisc.value } : null, tax: qTax || null,
         notes: (document.getElementById('qNotes')?.value || '').trim() || null,
@@ -10359,7 +10414,7 @@ const landSubtotal = (cfg) => (cfg.landItems||[]).reduce((a,it)=>a+landLineTotal
 function landOptions(){
   const cats=[...new Set(LAND_ITEMS.map(i=>i.cat))];
   const catEs={'Landscaping':'Paisajismo','HVAC':'Clima','Water/Electrical':'Agua/Eléctrico'};
-  return cats.map(c=>`<optgroup label="${esc(lang==='es'?(catEs[c]||c):c)}">`+LAND_ITEMS.map((it,idx)=>it.cat===c?`<option value="${idx}">${esc(landName(it))} — ${fmt(it.price)}/${esc(it.unit)}</option>`:'').join('')+`</optgroup>`).join('');
+  return cats.map(c=>`<optgroup label="${escAttr(lang==='es'?(catEs[c]||c):c)}">`+LAND_ITEMS.map((it,idx)=>it.cat===c?`<option value="${idx}">${esc(landName(it))} — ${fmt(it.price)}/${esc(it.unit)}</option>`:'').join('')+`</optgroup>`).join('');
 }
 window.salesAddLand = () => {
   const cfg=loadSalesCfg(); const sel=document.getElementById('slLandItem'); const qi=document.getElementById('slLandQty');
@@ -10740,7 +10795,7 @@ async function pageSales(){
           </div>
         </div>
         <div style="margin-top:12px"><div class="lbl">${lang==='es'?'Dirección de la casa':'Home address'} <span class="muted" style="text-transform:none;letter-spacing:0">— ${lang==='es'?'muestra el techo por satélite en la propuesta':'shows their roof from satellite in the proposal'}</span></div>
-          <input id="slAddr" type="text" autocomplete="off" placeholder="${lang==='es'?'Calle, ciudad, TX':'Street, City, TX'}" value="${esc(cfg.address||'')}" oninput="salesSync()"></div>
+          <input id="slAddr" type="text" autocomplete="off" placeholder="${lang==='es'?'Calle, ciudad, TX':'Street, City, TX'}" value="${escAttr(cfg.address||'')}" oninput="salesSync()"></div>
       </div>
       <div class="card"><div class="lbl">${lang==='es'?'Paisaje / Mejoras al hogar':'Landscape / Home improvement'} <span class="muted" style="text-transform:none;letter-spacing:0">— ${lang==='es'?'opcional · $0 por defecto · se financia junto con el solar':'optional · $0 default · finances together with the solar'}</span></div>
         <div style="display:grid;grid-template-columns:1fr 76px auto;gap:6px;margin-bottom:6px;align-items:start">
@@ -10837,7 +10892,7 @@ async function pageSolar(){
             <div id="slContactDrop" class="sl-cdrop" style="display:none"></div>
           </div>
           <div class="lbl">${es?'Dirección de la casa':'Home address'} <span class="muted" style="text-transform:none;letter-spacing:0">— ${es?'muestra el techo por satélite':'shows their roof from satellite'}</span></div>
-          <input id="slAddr" type="text" autocomplete="off" placeholder="${es?'Calle, ciudad, TX':'Street, City, TX'}" value="${esc(cfg.address||'')}" style="margin-bottom:12px">
+          <input id="slAddr" type="text" autocomplete="off" placeholder="${es?'Calle, ciudad, TX':'Street, City, TX'}" value="${escAttr(cfg.address||'')}" style="margin-bottom:12px">
           <div class="lbl">${es?'Consumo y cobertura':'Usage & offset'} <span class="muted" style="text-transform:none;letter-spacing:0">— ${es?'elige una fuente':'pick one source'}</span></div>
           <div class="sl-seg" id="slUsageSeg" style="display:flex;gap:6px;margin-bottom:9px;flex-wrap:wrap">
             <button type="button" class="sl-segbtn${(cfg.usageSrc||'avg')==='avg'?' on':''}" data-src="avg" onclick="salesSetUsageSrc('avg')">${icn('calculator','',14)} ${es?'Promedio $/mes':'Average $/mo'}</button>
@@ -10993,9 +11048,9 @@ window.salesNewContactModal = () => {
   host.innerHTML = `<div class="modal-scrim" onclick="if(event.target===this)this.remove()"><div class="modal" style="max-width:460px">
     <h1 class="page" style="font-size:23px;margin-bottom:3px">${es?'Nuevo':'New'} <em>${es?'contacto.':'contact.'}</em></h1>
     <div class="muted" style="font-size:12px;margin-bottom:12px">${es?'Sin salir de la venta — se vincula al instante':'Without leaving the sale — links instantly'}</div>
-    <div class="grid g2" style="margin-bottom:10px"><input id="snFirst" placeholder="${es?'Nombre':'First name'}" value="${esc(sFirst)}"><input id="snLast" placeholder="${es?'Apellido':'Last name'}" value="${esc(sLast)}"></div>
+    <div class="grid g2" style="margin-bottom:10px"><input id="snFirst" placeholder="${es?'Nombre':'First name'}" value="${escAttr(sFirst)}"><input id="snLast" placeholder="${es?'Apellido':'Last name'}" value="${escAttr(sLast)}"></div>
     <div class="grid g2" style="margin-bottom:10px"><input id="snPhone" inputmode="tel" placeholder="(915) 233-2222" oninput="fmtPhoneLive(this)" onblur="this.value=fmtPhone(this.value)"><input id="snEmail" type="email" placeholder="${es?'Correo':'Email'}"></div>
-    <div style="margin-bottom:4px"><input id="snAddr" placeholder="${es?'Dirección — autocompletar Google':'Address — Google autocomplete'}" value="${esc((document.getElementById('slAddr')?.value||'').trim())}"></div>
+    <div style="margin-bottom:4px"><input id="snAddr" placeholder="${es?'Dirección — autocompletar Google':'Address — Google autocomplete'}" value="${escAttr((document.getElementById('slAddr')?.value||'').trim())}"></div>
     <button class="btn btn-terra" style="width:100%;min-height:46px;margin-top:14px" id="snGo" onclick="salesCreateContact()">${es?'Crear y vincular':'Create & link'}</button>
     <div id="snErr" class="muted" style="color:var(--red);margin-top:8px;font-weight:600"></div></div></div>`;
   attachAddrAuto('snAddr');
@@ -11081,7 +11136,7 @@ function salesFinPlansHTML(bank, cfg){
   } else { ls=(typeof lenders!=='undefined'?lenders:[]).filter(l=>l.bank===bank); }
   if(!ls.length) return bandSel+`<div class="muted" style="font-size:12.5px;padding:6px 2px">${es?'Sin planes para este banco.':'No plans for this bank.'}</div>`;
   const allOn=ls.every(l=>(cfg.lenderIds||[]).includes(l.id));
-  const ctrl=`<div class="row" style="margin:2px 0 8px"><span class="muted" style="font-size:11px">${ls.length} ${es?'planes':'plans'}</span><button type="button" class="btn btn-ghost btn-sm" style="padding:3px 10px;min-height:26px" onclick="salesFinSelectAll('${esc(bank)}',${allOn?'false':'true'})">${allOn?(es?'Limpiar':'Clear'):(es?'Seleccionar todos':'Select all')}</button></div>`;
+  const ctrl=`<div class="row" style="margin:2px 0 8px"><span class="muted" style="font-size:11px">${ls.length} ${es?'planes':'plans'}</span><button type="button" class="btn btn-ghost btn-sm" style="padding:3px 10px;min-height:26px" onclick="salesFinSelectAll('${escJs(bank)}',${allOn?'false':'true'})">${allOn?(es?'Limpiar':'Clear'):(es?'Seleccionar todos':'Select all')}</button></div>`;
   const rows=ls.map(l=>`<label class="sl-fin"><input type="checkbox" id="slL_${l.id}" ${(cfg.lenderIds||[]).includes(l.id)?'checked':''} onchange="salesSync()">
     <span>${esc(l.term_label)} · ${(+l.apr).toFixed(2)}% APR ${l.note?`<span class="muted" style="font-size:11px">· ${esc(l.note)}</span>`:''}</span></label>`).join('');
   return bandSel+ctrl+rows;
@@ -11246,7 +11301,8 @@ window.salesSaveToContact = async (opts) => {
   const btn = document.getElementById('slSaveContact'); const orig = btn ? btn.innerHTML : '';
   if (btn && !opts.silent) { btn.disabled = true; btn.innerHTML = es?'Guardando…':'Saving…'; }
   try {
-    const { data: row } = await sb.from('clients').select('presentations').eq('id', cfg.clientId).single();
+    const { data: row, error: selErr } = await sb.from('clients').select('presentations').eq('id', cfg.clientId).single();
+    if (selErr) throw selErr;   // never proceed on a failed read — an empty arr here would wipe all saved presentations
     const arr = salesPresArr(row);
     if (arr.some(p => salesPresFingerprint(p.cfg) === fp)) {        // exact duplicate → don't save
       if (!opts.silent) toast(es?'Esa presentación ya está guardada (sin cambios)':'That presentation is already saved (no changes)');
@@ -11325,9 +11381,13 @@ window.deleteContactPresentation = async (clientId, presId) => {
   const es = lang==='es';
   if (!confirm(es?'¿Eliminar esta presentación?':'Delete this presentation?')) return;
   try {
-    const { data: row } = await sb.from('clients').select('presentations').eq('id', clientId).single();
-    const next = salesPresArr(row).filter(p => p.id !== presId);
-    await sb.from('clients').update({ presentations: next, presentation: (next.length?next[next.length-1].cfg:null) }).eq('id', clientId);
+    const { data: row, error: selErr } = await sb.from('clients').select('presentations').eq('id', clientId).single();
+    if (selErr) throw selErr;   // don't rewrite the array from a failed read (would wipe all presentations)
+    const cur = salesPresArr(row);
+    const next = cur.filter(p => p.id !== presId);
+    if (next.length === cur.length) { toast(es?'Ya no existe':'Already gone'); return; }
+    const { error: upErr } = await sb.from('clients').update({ presentations: next, presentation: (next.length?next[next.length-1].cfg:null) }).eq('id', clientId);
+    if (upErr) throw upErr;
     toast(es?'Presentación eliminada':'Presentation deleted');
     if (typeof render === 'function') render();
   } catch(e){ toast(e.message || 'Failed'); }
@@ -11816,7 +11876,7 @@ function shEnter(i){
 /* landscape "design reel": auto-playing card of real El Paso jobs (video feel) */
 function shReelHTML(){
   return `<div class="sh-reel">
-    ${SH_PHOTOS.map((u,i)=>`<img src="${esc(u)}" alt="" ${i===0?'class="on"':''}>`).join('')}
+    ${SH_PHOTOS.map((u,i)=>`<img src="${escAttr(u)}" alt="" ${i===0?'class="on"':''}>`).join('')}
     <span class="sh-reel-rec">${lang==='es'?'EN VIVO':'LIVE'}</span>
     <span class="sh-reel-tag">${lang==='es'?'Diseños reales · El Paso':'Real designs · El Paso'}</span>
   </div>`;
@@ -12094,7 +12154,7 @@ function proposalDocHTML(s){
     ${cust ? `<div style="font-family:Arial,sans-serif;font-size:13px;margin-top:12px"><b>${esc(cust)}</b>${addr?` · ${esc(addr)}`:''}</div>` : ''}
     ${s.address ? `<div style="margin-top:14px;text-align:center"><div class="pd-sat" style="margin:0 auto"><img src="${satMapUrl(s.address,'500x500')}" referrerpolicy="no-referrer"><div class="pd-array" style="grid-template-columns:repeat(${satCols(s.pkg.panels||34)},auto);transform:translate(calc(-50% + ${satState.x}px), calc(-50% + ${satState.y}px)) rotate(${satState.rot}deg) scale(${satState.scale})">${satArrayPanels(s.pkg.panels||34)}</div></div><div style="font-family:Arial,sans-serif;font-size:10px;color:#999;margin-top:4px">${es?'Diseño preliminar · colocación de paneles aproximada':'Preliminary design · panel layout approximate'}</div></div>` : ''}
     <div style="${st.sec}">${es?'Sistema solar':'Solar system'}</div>
-    <table style="${st.tbl}"><tr><td style="${st.td}"><b>${esc(s.pkg.name)}</b><br><span style="color:#666;font-size:12px">${pkgPanelLabel(s.pkg)} × ${s.pkg.panel_watts}W — ${(s.pkg.panels*s.pkg.panel_watts).toLocaleString('en-US')}W${s.pkg.battery?` · ${esc(s.pkg.battery)}`:''}</span></td><td style="${st.td};text-align:right;font-weight:700">${money(s.price)}</td></tr></table>
+    <table style="${st.tbl}"><tr><td style="${st.td}"><b>${esc(s.pkg.name)}</b><br><span style="color:#666;font-size:12px">${pkgPanelLabel(s.pkg)} × ${(+s.pkg.panel_watts||0)}W — ${(((+s.pkg.panels||34)*(+s.pkg.panel_watts||0))).toLocaleString('en-US')}W${s.pkg.battery?` · ${esc(s.pkg.battery)}`:''}</span></td><td style="${st.td};text-align:right;font-weight:700">${money(s.price)}</td></tr></table>
     ${proposalChartHTML(s)}
     ${s.landSub > 0 ? `<div style="${st.sec}">${es?'Paisaje y mejoras al hogar':'Landscape & home improvement'}</div>
     <table style="${st.tbl}">${landRows}<tr><td style="${st.td};font-weight:700" colspan="2">${es?'Subtotal paisaje':'Landscape subtotal'}</td><td style="${st.td};text-align:right;font-weight:700">${money(s.landSub)}</td></tr></table>` : ''}
@@ -12106,7 +12166,7 @@ function proposalDocHTML(s){
     </table>
     ${l ? `<div style="margin-top:18px;background:#faf6ef;border:1px solid #e6ddcf;border-radius:10px;padding:16px;display:flex;justify-content:space-between;align-items:center;font-family:Arial,sans-serif">
       <div><div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#8a7a66">${es?'Tu pago mensual':'Your monthly payment'}</div><div style="${st.big}">${money(grandMonthly)}<span style="font-size:16px;color:#8a7a66">${es?'/mes':'/mo'}</span></div></div>
-      <div style="text-align:right;font-size:12px;color:#444">${esc(l.term_label)} · ${(+l.apr).toFixed(2)}% APR<br>${es?'Monto a financiar':'Amount to finance'}: <b>${money(grandFinanced)}</b>${bill?`<br><span style="color:#2e8b40">${money(bill-grandMonthly)} ${es?'menos que tu factura actual':'less than your current bill'}</span>`:''}</div>
+      <div style="text-align:right;font-size:12px;color:#444">${esc(l.term_label)} · ${(+l.apr).toFixed(2)}% APR<br>${es?'Monto a financiar':'Amount to finance'}: <b>${money(grandFinanced)}</b>${bill && (bill-grandMonthly)>0?`<br><span style="color:#2e8b40">${money(bill-grandMonthly)} ${es?'menos que tu factura actual':'less than your current bill'}</span>`:''}</div>
     </div>` : ''}
     ${cash ? `<div style="margin-top:18px;background:#faf6ef;border:1px solid #e6ddcf;border-radius:10px;padding:16px;display:flex;justify-content:space-between;align-items:center;font-family:Arial,sans-serif">
       <div><div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#8a7a66">${es?'Pago en efectivo':'Cash payment'}</div><div style="${st.big}">${money(grand)}</div></div>
@@ -12464,7 +12524,7 @@ async function pageHIQuote(){
           <div class="muted" style="font-size:12px;text-align:right;margin-top:3px">${es?'o ':'or '}$<span id="hiqMo">0</span>/${es?'mes financiado':'mo financed'}</div>
           <div class="lbl" style="margin-top:14px">${es?'Financiamiento':'Financing'} <span class="muted" style="text-transform:none;letter-spacing:0">(${es?'opcional — pasa al contrato':'optional — carries to the contract'})</span></div>
           <div class="grid g2" style="gap:8px;margin-top:6px">
-            <input id="hiqFinCo" placeholder="${es?'Financiera (TGUC, Salal…)':'Financing company (TGUC, Salal…)'}" value="${esc(hiqState.fin.company||'')}" oninput="hiqFinSet('company',this.value)">
+            <input id="hiqFinCo" placeholder="${es?'Financiera (TGUC, Salal…)':'Financing company (TGUC, Salal…)'}" value="${escAttr(hiqState.fin.company||'')}" oninput="hiqFinSet('company',this.value)">
             <input id="hiqFinApr" type="number" inputmode="decimal" placeholder="APR %" value="${hiqState.fin.apr||''}" oninput="hiqFinSet('apr',this.value)">
             <input id="hiqFinTerm" type="number" inputmode="numeric" placeholder="${es?'Plazo (meses)':'Term (months)'}" value="${hiqState.fin.term||''}" oninput="hiqFinSet('term',this.value)">
             <input id="hiqFinDown" type="number" inputmode="decimal" placeholder="${es?'Enganche $':'Down payment $'}" value="${hiqState.fin.down||''}" oninput="hiqFinSet('down',this.value)">
@@ -12544,7 +12604,7 @@ function hiqRenderLines(){
   box.innerHTML = hiqState.lines.map((l,i) => {
     const info = hiqLineInfo(l); const lt = l.qty*info.price;
     const nameCell = l.custom
-      ? `<input id="hiqCustDesc${i}" value="${esc(l.desc||'')}" placeholder="${lang==='es'?'Concepto personalizado…':'Custom item…'}" oninput="hiqCustSet(${i},'desc',this.value)" style="width:100%;font-size:12.5px;font-weight:600;border:1px solid var(--border-2);border-radius:6px;padding:4px 6px;background:var(--surface)">
+      ? `<input id="hiqCustDesc${i}" value="${escAttr(l.desc||'')}" placeholder="${lang==='es'?'Concepto personalizado…':'Custom item…'}" oninput="hiqCustSet(${i},'desc',this.value)" style="width:100%;font-size:12.5px;font-weight:600;border:1px solid var(--border-2);border-radius:6px;padding:4px 6px;background:var(--surface)">
          <div style="display:flex;align-items:center;gap:4px;margin-top:3px"><span class="muted" style="font-size:11px">$</span><input type="number" inputmode="decimal" value="${l.price}" onchange="hiqCustSet(${i},'price',this.value)" title="${lang==='es'?'Precio por unidad':'Price per unit'}" style="width:62px;font-size:11px;border:1px solid var(--border-2);border-radius:6px;padding:2px 5px;background:var(--surface)"><select onchange="hiqCustSet(${i},'unit',this.value)" style="font-size:11px;border:1px solid var(--border-2);border-radius:6px;padding:2px 4px;background:var(--surface)"><option value="unit" ${l.unit==='unit'?'selected':''}>${lang==='es'?'c/u':'unit'}</option><option value="sq ft" ${l.unit==='sq ft'?'selected':''}>sq ft</option><option value="ft" ${l.unit==='ft'?'selected':''}>ft</option></select></div>`
       : `<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(info.desc)}</div><div class="muted" style="font-size:11px">${fmt(info.price)}/${esc(info.unit)}</div>`;
     return `<div class="row" style="gap:8px;padding:8px 0;border-bottom:1px solid var(--border);align-items:center">
@@ -12813,7 +12873,7 @@ function renderHdm(){
   box.innerHTML = list.map(c => {
     const title = esc(es ? c.title_es : c.title_en);
     const auds = (c.audiences || []).filter(a => a !== 'all').map(a => `<span class="hdm-tag">${hdmAudShort(a, es)}</span>`).join('');
-    return `<div class="hdm-row" onclick="hdmOpenCard('${esc(c.slug)}')">
+    return `<div class="hdm-row" onclick="hdmOpenCard('${escJs(c.slug)}')">
       <div class="ic">${icn(c.category === 'objections' ? 'message' : (c.is_killer ? 'alert-octagon' : 'file'),'',16)}</div>
       <div style="min-width:0;flex:1">
         <div class="hdm-ttl">${title}</div>
@@ -12838,7 +12898,7 @@ window.hdmOpenCard = (slug) => {
   const next = list[(idx + 1) % list.length];
   const multi = list.length > 1;
   document.getElementById('hdmModalHost').innerHTML = `<div class="modal-scrim hdm-scrim" onclick="if(event.target===this)this.remove()">
-    ${multi ? `<button class="hdm-nav prev" aria-label="${es?'Anterior':'Previous'}" onclick="event.stopPropagation();hdmOpenCard('${esc(prev)}')">&lsaquo;</button>` : ''}
+    ${multi ? `<button class="hdm-nav prev" aria-label="${es?'Anterior':'Previous'}" onclick="event.stopPropagation();hdmOpenCard('${escJs(prev)}')">&lsaquo;</button>` : ''}
     <div class="modal hdm-modal">
       <div class="row" style="margin-bottom:6px;align-items:flex-start;gap:12px">
         <h1 class="page" style="font-size:clamp(23px,3.1vw,31px);margin:0;line-height:1.12">${title}</h1>
@@ -12850,12 +12910,12 @@ window.hdmOpenCard = (slug) => {
       </div>
       <div class="hdm-doc scroll-y" style="max-height:58vh;margin-bottom:14px">${hdmMd(es ? c.body_es : c.body_en)}</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        ${multi ? `<button class="btn btn-line btn-sm" onclick="hdmOpenCard('${esc(prev)}')">&lsaquo; ${es?'Anterior':'Prev'}</button>` : ''}
-        ${isHouse() ? `<button class="btn btn-terra" style="flex:1;min-width:160px;min-height:46px;font-size:14.5px" onclick="hdmAskClaudioCard('${esc(c.slug)}')">${icn('sparkles','',15)} ${es?'Pregúntale a Claudio':'Ask Claudio'}</button>` : (multi ? '<span style="flex:1"></span>' : '')}
-        ${multi ? `<button class="btn btn-line btn-sm" onclick="hdmOpenCard('${esc(next)}')">${es?'Siguiente':'Next'} &rsaquo;</button>` : ''}
+        ${multi ? `<button class="btn btn-line btn-sm" onclick="hdmOpenCard('${escJs(prev)}')">&lsaquo; ${es?'Anterior':'Prev'}</button>` : ''}
+        ${isHouse() ? `<button class="btn btn-terra" style="flex:1;min-width:160px;min-height:46px;font-size:14.5px" onclick="hdmAskClaudioCard('${escJs(c.slug)}')">${icn('sparkles','',15)} ${es?'Pregúntale a Claudio':'Ask Claudio'}</button>` : (multi ? '<span style="flex:1"></span>' : '')}
+        ${multi ? `<button class="btn btn-line btn-sm" onclick="hdmOpenCard('${escJs(next)}')">${es?'Siguiente':'Next'} &rsaquo;</button>` : ''}
       </div>
     </div>
-    ${multi ? `<button class="hdm-nav next" aria-label="${es?'Siguiente':'Next'}" onclick="event.stopPropagation();hdmOpenCard('${esc(next)}')">&rsaquo;</button>` : ''}
+    ${multi ? `<button class="hdm-nav next" aria-label="${es?'Siguiente':'Next'}" onclick="event.stopPropagation();hdmOpenCard('${escJs(next)}')">&rsaquo;</button>` : ''}
   </div>`;
 };
 window.hdmAskClaudioCard = (slug) => {
@@ -12952,7 +13012,7 @@ window.hdmGradeQuiz = async () => {
         <h1 class="page" style="font-size:22px">${es?'Casi':'Almost'}<em>.</em></h1>
         <div class="eyebrow" style="margin-bottom:10px">${score}/${total} — ${mustMissed.length ? (es?'fallaste preguntas CRÍTICAS de cumplimiento (★) — debes acertar TODAS. Repasa y reintenta:':'you missed CRITICAL compliance questions (★) — you must get every one right. Review and retry:') : (es?'necesitas 80%. Repasa esto e inténtalo de nuevo:':'you need 80%. Review these and try again:')}</div>
         <div class="scroll-y" style="max-height:46vh"><ul style="padding-left:18px;margin:0">${list}</ul></div>
-        <button class="btn btn-terra" style="width:100%;min-height:44px;margin-top:12px" onclick="this.closest('.modal-scrim').remove();hdmStartQuiz('${esc(hdmQuiz.track)}')">${es?'Volver a intentar':'Try again'}</button>
+        <button class="btn btn-terra" style="width:100%;min-height:44px;margin-top:12px" onclick="this.closest('.modal-scrim').remove();hdmStartQuiz('${escJs(hdmQuiz.track)}')">${es?'Volver a intentar':'Try again'}</button>
       </div></div>`;
   }
 };
@@ -13443,7 +13503,7 @@ async function pageExpenses(){
     <div class="card" style="padding:0"><div style="max-height:calc(100dvh - 390px);min-height:220px;overflow:auto"><table class="tbl" id="expTable">
       <thead><tr>${['Date','Job','Customer','Category','Vendor','Amount','By'].map((h,i)=>`<th class="sort-th" onclick="expenseSort(${i},this)">${h}<span class="sar"></span></th>`).join('')}</tr></thead>
       <tbody>
-      ${ex.map(e => { const date=(e.created_at||'').slice(0,10); const code=e.deals?.deal_code||''; const cust=e.deals?.clients?.name||''; const cat=(e.category||'').replace('_',' '); const ven=e.vendor||''; const srch=`${date} ${code} ${cust} ${cat} ${ven} ${e.amount}`.toLowerCase(); return `<tr data-s="${esc(srch)}" style="cursor:pointer" onclick="expenseModal('${e.id}')">
+      ${ex.map(e => { const date=(e.created_at||'').slice(0,10); const code=e.deals?.deal_code||''; const cust=e.deals?.clients?.name||''; const cat=(e.category||'').replace('_',' '); const ven=e.vendor||''; const srch=`${date} ${code} ${cust} ${cat} ${ven} ${e.amount}`.toLowerCase(); return `<tr data-s="${escAttr(srch)}" style="cursor:pointer" onclick="expenseModal('${e.id}')">
         <td class="muted">${date}</td>
         <td><b>${esc(code)}</b></td>
         <td>${esc(cust)}</td>
@@ -13503,7 +13563,7 @@ window.expenseModal = async (id, presetDealId) => {
       <h1 class="page" style="font-size:24px">${e ? 'Edit' : 'Add'} <em>expense.</em></h1>
       <div class="lbl" style="margin-top:14px">${lang==='es'?'Trabajo':'Job'}</div>
       <div style="position:relative;margin:4px 0 10px">
-        <input id="exDealSearch" type="text" autocomplete="off" placeholder="${lang==='es'?'Buscar trabajo…':'Search a job…'}" value="${esc(selLabel)}" oninput="exDealFilter(this.value)" onfocus="exDealFilter(this.value)" onblur="setTimeout(()=>{const d=document.getElementById('exDealDrop');if(d)d.style.display='none'},180)">
+        <input id="exDealSearch" type="text" autocomplete="off" placeholder="${lang==='es'?'Buscar trabajo…':'Search a job…'}" value="${escAttr(selLabel)}" oninput="exDealFilter(this.value)" onfocus="exDealFilter(this.value)" onblur="setTimeout(()=>{const d=document.getElementById('exDealDrop');if(d)d.style.display='none'},180)">
         <input type="hidden" id="exDeal" value="${selDeal||''}">
         <div id="exDealDrop" class="sl-cdrop" style="display:none"></div>
       </div>
@@ -13538,15 +13598,17 @@ window.exDealPick = (id) => {
   const drop = document.getElementById('exDealDrop'); if (drop) drop.style.display = 'none';
 };
 window.saveExpense = async (id) => {
+  const dealId = (document.getElementById('exDeal').value || '').trim() || null;
+  if (!dealId) { toast(lang==='es'?'Elige un trabajo primero':'Pick a job first'); return; }   // empty string → Postgres uuid error
   const payload = {
-    deal_id: document.getElementById('exDeal').value,
+    deal_id: dealId,
     category: document.getElementById('exCat2').value,
     vendor: document.getElementById('exVendor2').value.trim(),
-    amount: parseFloat(document.getElementById('exAmt2').value) || 0,
+    amount: Math.round((parseFloat(document.getElementById('exAmt2').value) || 0) * 100) / 100,
     note: document.getElementById('exNote2').value.trim(),
     paid: document.getElementById('exPaid').checked,
   };
-  if (!payload.amount) { toast('Amount required'); return; }
+  if (!(payload.amount > 0)) { toast(lang==='es'?'El monto debe ser mayor que 0':'Amount must be greater than 0'); return; }
   const { error } = id
     ? await sb.from('deal_expenses').update(payload).eq('id', id)
     : await sb.from('deal_expenses').insert({ ...payload, created_by: me.id });
@@ -13740,10 +13802,11 @@ window.sendReview = async (dealId, btn) => {
   if (!email) { toast('Customer needs an email first — copy a text instead'); return; }
   if (btn) btn.disabled = true;
   try {
-    await fetch(N8N_NOTIFY, { method:'POST', body: new URLSearchParams({
+    const r = await fetch(N8N_NOTIFY, { method:'POST', body: new URLSearchParams({
       action:'review-request', deal_code: d.deal_code || '', customer: d.clients?.name || '',
       customer_email: email, customer_phone: d.clients?.phone || '', review_url: REVIEW_URL, rep: me.name,
     }) });
+    if (!r.ok) { toast('Could not send the review request — please try again'); if (btn) btn.disabled = false; return; }   // don't log "sent" for a request that never went out
     await sb.from('deal_events').insert({ deal_id: dealId, event:'review_request', detail: 'Google review request sent to ' + (d.clients?.name || 'customer'), by_id: me.id });
     toast('Review request sent');
     if (route().split('/')[0] === 'marketing') render();
@@ -14004,9 +14067,14 @@ window.oblMarkPaid = async (id) => {
   const es = lang === 'es';
   const o = (window._oblCache||[]).find(x=>x.id===id); if (!o) return;
   const todayS = ymdLocal(new Date());
-  await sb.from('obligation_payments').insert({ obligation_id:o.id, dealer_id:o.dealer_id, name:o.name, category:o.category, amount:o.amount, paid_on:todayS, due_date:o.due_date, paid_by:me.id });
-  if (o.recurrence === 'none') await sb.from('obligations').update({ status:'archived', last_paid_on:todayS }).eq('id', id);
-  else await sb.from('obligations').update({ due_date: oblAdvance(o.due_date, o.recurrence), last_paid_on:todayS }).eq('id', id);
+  // Record the payment FIRST and bail on failure — never advance/archive the bill without a
+  // matching ledger row, or the payment silently disappears while the bill rolls forward.
+  const { error: payErr } = await sb.from('obligation_payments').insert({ obligation_id:o.id, dealer_id:o.dealer_id, name:o.name, category:o.category, amount:o.amount, paid_on:todayS, due_date:o.due_date, paid_by:me.id });
+  if (payErr) { toast((es?'No se pudo registrar el pago: ':'Could not record payment: ') + (payErr.message||payErr)); return; }
+  let advErr;
+  if (o.recurrence === 'none') ({ error: advErr } = await sb.from('obligations').update({ status:'archived', last_paid_on:todayS }).eq('id', id));
+  else ({ error: advErr } = await sb.from('obligations').update({ due_date: oblAdvance(o.due_date, o.recurrence), last_paid_on:todayS }).eq('id', id));
+  if (advErr) { toast((es?'Pago registrado, pero no se pudo avanzar la factura: ':'Payment saved, but could not advance the bill: ') + (advErr.message||advErr)); render(); return; }
   toast(es?'Pagado':'Marked paid'); render();
 };
 /* Overhead CASH-OUT ledger (obligation_payments). Three entry points share one editable modal:
@@ -14031,16 +14099,16 @@ function oblPayForm(opts){
     <h1 class="page" style="font-size:22px">${title}<em>.</em></h1>
     ${obl?`<div class="muted" style="font-size:12px;margin:2px 0 8px">${es?'Pagando':'Paying'}: <b>${esc(obl.name)}</b> · ${recurLabel(obl.recurrence)}</div>`:`<div class="muted" style="font-size:12px;margin:2px 0 8px">${es?'Gasto del negocio que NO pertenece a un trabajo (oficina, gasolina, herramientas…).':'A business cost that does NOT belong to a job (office, gas, tools…).'}</div>`}
     <div class="lbl" style="margin-top:6px">${es?'Concepto':'What for'}</div>
-    <input id="opName" placeholder="${es?'ej. Gasolina, materiales de oficina':'e.g. Gas, office supplies'}" value="${esc(name)}" ${obl?'readonly':''} style="margin-bottom:10px">
+    <input id="opName" placeholder="${es?'ej. Gasolina, materiales de oficina':'e.g. Gas, office supplies'}" value="${escAttr(name)}" ${obl?'readonly':''} style="margin-bottom:10px">
     <div class="grid g2" style="margin-bottom:10px">
       <div><div class="lbl">${es?'Tipo':'Category'}</div><select id="opCat">${catOpts}</select></div>
       <div><div class="lbl">${es?'Monto':'Amount'}</div><input id="opAmt" type="number" inputmode="decimal" placeholder="$" value="${amount!=null?amount:''}"></div>
     </div>
     <div class="grid g2" style="margin-bottom:10px">
       <div><div class="lbl">${es?'Fecha de pago':'Date paid'}</div><input id="opDate" type="date" value="${paidOn}"></div>
-      <div><div class="lbl">${es?'Método':'Method'}</div><input id="opMethod" placeholder="${es?'Zelle, tarjeta, cheque…':'Zelle, card, check…'}" value="${esc(method)}"></div>
+      <div><div class="lbl">${es?'Método':'Method'}</div><input id="opMethod" placeholder="${es?'Zelle, tarjeta, cheque…':'Zelle, card, check…'}" value="${escAttr(method)}"></div>
     </div>
-    <input id="opNote" placeholder="${es?'Nota (opcional)':'Note (optional)'}" value="${esc(note)}" style="margin-bottom:12px">
+    <input id="opNote" placeholder="${es?'Nota (opcional)':'Note (optional)'}" value="${escAttr(note)}" style="margin-bottom:12px">
     <input type="hidden" id="opPayId" value="${pay?pay.id:''}">
     <input type="hidden" id="opOblId" value="${obl?obl.id:''}">
     <div class="row">${pay?`<button class="btn btn-line btn-sm" onclick="oblPayDel('${pay.id}')" style="color:var(--red);border-color:var(--red)">${icn('trash','',14)}</button>`:'<span></span>'}
@@ -14173,7 +14241,7 @@ async function pagePayApprovals(){
     ${owed.length ? `<div class="card"><div class="lbl">${es?'Saldos a subs (de contratos)':'Sub balances (from contracts)'} <span class="muted">${owed.length}</span></div>
       <div class="scroll-y" style="max-height:55vh">${owed.map(s => `<div class="row" style="padding:9px 0;border-bottom:1px solid var(--border)"><span style="min-width:0;cursor:pointer" onclick="openDeal('${s.deal_id}')"><b style="font-size:13px">${esc(s.contractor_name)}</b> <span class="muted" style="font-size:11px">${esc(s.deal?.deal_code||'')}</span></span><span style="display:flex;gap:8px;align-items:center"><span class="money" style="color:var(--red)">${fmt(s.bal)}</span><button class="btn btn-line btn-sm" onclick="subPayModal('${s.id}','${s.deal_id}')">${es?'Pagar':'Pay'}</button></span></div>`).join('')}</div></div>` : ''}
     ${decided.length ? `<div class="card" style="opacity:.85"><div class="lbl">${es?'Decididos recientemente':'Recently decided'}</div>
-      ${decided.map(r => `<div class="row" style="padding:7px 0;border-bottom:1px solid var(--border);font-size:12.5px"><span><b>${esc(r.payee_name)}</b> <span class="muted">${r.status==='approved'?icn('check','',13)+' '+(es?'aprobado':'approved'):(es?'rechazado':'rejected')}${r.approved_by_name?' · '+esc(r.approved_by_name.split(' ')[0]):''}</span></span><span style="display:flex;align-items:center;gap:9px;flex-shrink:0">${r.status==='approved'?(r.proof_path?`<span onclick="payViewProof('${esc(r.proof_path)}')" title="${es?'Ver comprobante':'View proof'}" style="cursor:pointer;color:var(--terra);display:inline-flex;align-items:center;gap:3px;font-size:11px">${icn('paperclip','',12)} ${es?'comprobante':'proof'}</span>`:(canManage?`<span onclick="payAttachProof('${r.id}')" title="${es?'Adjuntar comprobante':'Attach proof'}" style="cursor:pointer;color:var(--dim);display:inline-flex;align-items:center;gap:3px;font-size:11px">${icn('paperclip','',12)} +</span>`:'')):''}<span class="money" style="${r.status==='rejected'?'opacity:.5;text-decoration:line-through':''}">${fmt(r.amount)}</span></span></div>`).join('')}</div>` : ''}`;
+      ${decided.map(r => `<div class="row" style="padding:7px 0;border-bottom:1px solid var(--border);font-size:12.5px"><span><b>${esc(r.payee_name)}</b> <span class="muted">${r.status==='approved'?icn('check','',13)+' '+(es?'aprobado':'approved'):(es?'rechazado':'rejected')}${r.approved_by_name?' · '+esc(r.approved_by_name.split(' ')[0]):''}</span></span><span style="display:flex;align-items:center;gap:9px;flex-shrink:0">${r.status==='approved'?(r.proof_path?`<span onclick="payViewProof('${escJs(r.proof_path)}')" title="${es?'Ver comprobante':'View proof'}" style="cursor:pointer;color:var(--terra);display:inline-flex;align-items:center;gap:3px;font-size:11px">${icn('paperclip','',12)} ${es?'comprobante':'proof'}</span>`:(canManage?`<span onclick="payAttachProof('${r.id}')" title="${es?'Adjuntar comprobante':'Attach proof'}" style="cursor:pointer;color:var(--dim);display:inline-flex;align-items:center;gap:3px;font-size:11px">${icn('paperclip','',12)} +</span>`:'')):''}<span class="money" style="${r.status==='rejected'?'opacity:.5;text-decoration:line-through':''}">${fmt(r.amount)}</span></span></div>`).join('')}</div>` : ''}`;
 }
 window.payReqModal = async (pr) => {
   const es = lang === 'es';
@@ -14296,8 +14364,15 @@ window.payReqApprove = async (id) => {
 // core approve (no validation / no render) — reused by the single Approve button AND the batch "approve with proof" flow
 async function doApprove(r, extra){
   const nowIso = new Date().toISOString();
-  // mark approved + paid, then mirror it onto the customer's job ledger (sub → contractor payment · other → expense · commission → this paid row IS the ledger)
-  await sb.from('payout_requests').update({ status: 'approved', paid: true, paid_at: nowIso, approved_by: me.id, approved_by_name: me.name, approved_at: nowIso, ...(extra||{}) }).eq('id', r.id);
+  // Atomic claim: flip pending→approved conditionally so two admins clicking Approve at once
+  // can't BOTH proceed to write the ledger (double payment). Only the winner (a row actually
+  // updated) posts the ledger; the loser no-ops.
+  const { data: claimed, error: claimErr } = await sb.from('payout_requests')
+    .update({ status: 'approved', paid: true, paid_at: nowIso, approved_by: me.id, approved_by_name: me.name, approved_at: nowIso, ...(extra||{}) })
+    .eq('id', r.id).eq('status', 'pending').select();
+  if (claimErr) throw claimErr;
+  if (!claimed || !claimed.length) return;   // already approved by someone else — do not double-post the ledger
+  // mirror it onto the customer's job ledger (sub → contractor payment · other → expense · commission → this paid row IS the ledger)
   await recordPayoutLedger({ ...r, paid_at: nowIso, approved_at: nowIso });
   if (r.requested_by && r.requested_by !== me.id) { try { await sb.from('notifications').insert({ user_id: r.requested_by, type: 'commission', by_name: me.name, url: '/crm.html#/payapprovals', text: (lang==='es'?'Pago aprobado · ':'Payout approved · ') + r.payee_name + ' ' + fmt(r.amount) }); } catch(e){} }
   await sb.from('tasks').update({ done: true }).eq('payout_request_id', r.id);   // clear the approval to-do
@@ -14372,12 +14447,12 @@ window.permModal = (id) => {
 
     <div class="lbl">${es?'Información básica':'Basic info'}</div>
     <div class="grid g2" style="margin-bottom:8px">
-      <input id="pmName" value="${esc(x.name||'')}" placeholder="${es?'Nombre':'Name'}">
-      <input id="pmPhone" value="${esc(x.phone||'')}" placeholder="${es?'Teléfono':'Phone'}" onblur="this.value=fmtPhone(this.value)">
+      <input id="pmName" value="${escAttr(x.name||'')}" placeholder="${es?'Nombre':'Name'}">
+      <input id="pmPhone" value="${escAttr(x.phone||'')}" placeholder="${es?'Teléfono':'Phone'}" onblur="this.value=fmtPhone(this.value)">
     </div>
     <div class="grid g2" style="margin-bottom:8px">
-      <input id="pmTitle" value="${esc(x.title||'')}" placeholder="${es?'Puesto (ej. Vendedor)':'Title (e.g. Sales Rep)'}">
-      ${isAdmin ? `<input id="pmEmail" placeholder="${es?'Correo de acceso':'Login email'}" autocomplete="off" value="">` : `<input value="${esc(x.role)}" disabled>`}
+      <input id="pmTitle" value="${escAttr(x.title||'')}" placeholder="${es?'Puesto (ej. Vendedor)':'Title (e.g. Sales Rep)'}">
+      ${isAdmin ? `<input id="pmEmail" placeholder="${es?'Correo de acceso':'Login email'}" autocomplete="off" value="">` : `<input value="${escAttr(x.role)}" disabled>`}
     </div>
     <button class="btn btn-terra btn-sm" style="width:100%" onclick="saveTeamInfo('${x.id}')">${es?'Guardar información':'Save info'}</button>
     ${isAdmin ? `<div id="pmInfoMeta" class="muted" style="font-size:11px;margin-top:6px"></div>` : ''}
@@ -14570,14 +14645,14 @@ async function pageSettings(){
   };
   const dealersCard = me.role === 'admin' ? `<div class="card"><div class="lbl">Dealers &amp; onboarding</div>
     <div class="muted" style="font-size:12px;margin-bottom:12px">${lang==='es'?'Da de alta a un dealer: se le manda el acuerdo + W-9 en SignWell y se le crea su acceso de administrador para que arme su propio equipo.':'Onboard a dealer — send the dealer agreement + W-9 in SignWell and create their admin login so they can build their own team.'}</div>
-    <div class="scroll-y" style="max-height:330px;margin:0 -2px;padding:0 2px">${dealers.map(d => `<div class="row td-srch" data-s="${esc(((d.name||'')+' '+(d.contact_email||'')).toLowerCase())}" onclick="dealerManageModal('${d.id}')" style="padding:11px 0;border-bottom:1px solid var(--border);cursor:pointer">
-      <span style="display:flex;align-items:center;gap:10px;min-width:0">${d.logo_url ? `<img src="${esc(d.logo_url)}" style="height:30px;width:auto;border-radius:4px">` : '<span style="width:30px;display:inline-flex;justify-content:center" class="muted">' + icn('bank','',18) + '</span>'}
+    <div class="scroll-y" style="max-height:330px;margin:0 -2px;padding:0 2px">${dealers.map(d => `<div class="row td-srch" data-s="${escAttr(((d.name||'')+' '+(d.contact_email||'')).toLowerCase())}" onclick="dealerManageModal('${d.id}')" style="padding:11px 0;border-bottom:1px solid var(--border);cursor:pointer">
+      <span style="display:flex;align-items:center;gap:10px;min-width:0">${d.logo_url ? `<img src="${escAttr(d.logo_url)}" style="height:30px;width:auto;border-radius:4px">` : '<span style="width:30px;display:inline-flex;justify-content:center" class="muted">' + icn('bank','',18) + '</span>'}
         <span style="min-width:0"><b style="font-size:13.5px">${esc(d.name)}</b>${d.contact_email?`<div class="muted" style="font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.contact_email)}</div>`:''}</span></span>
       <span style="display:flex;align-items:center;gap:7px;flex-shrink:0">${d.id !== HOUSE_DEALER && d.onboarding_status !== 'active' ? `<button class="btn btn-line btn-sm" style="padding:3px 10px;min-height:28px;border-color:var(--terra);color:var(--terra)" onclick="event.stopPropagation();resendDealerInvite('${d.id}')">${lang==='es'?'Reenviar':'Resend'}</button>` : ''}${dChip(d)}<span class="muted" style="font-size:18px">›</span></span>
     </div>`).join('')}</div>
     <button class="btn btn-terra" style="width:100%;margin-top:14px;min-height:46px" onclick="onboardDealerModal()">${icn('bank','',16)} ${lang==='es'?'Dar de alta un dealer':'Onboard a dealer'}</button>
   </div>` : (me.role === 'dealer_admin' && myDealer ? `<div class="card"><div class="lbl">My dealer — ${esc(myDealer.name)}</div>
-    <div class="row"><span>${myDealer.logo_url ? `<img src="${esc(myDealer.logo_url)}" style="height:34px;border-radius:4px">` : '<span class="muted">No logo yet — your logo shows in the sidebar for your whole team.</span>'}</span>
+    <div class="row"><span>${myDealer.logo_url ? `<img src="${escAttr(myDealer.logo_url)}" style="height:34px;border-radius:4px">` : '<span class="muted">No logo yet — your logo shows in the sidebar for your whole team.</span>'}</span>
     <label class="btn btn-terra btn-sm" style="cursor:pointer">Upload logo<input type="file" accept="image/*" style="display:none" onchange="uploadDealerLogo('${myDealer.id}', this)"></label></div>
     <label class="row" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);cursor:pointer">
       <span style="font-size:13px"><b>${lang==='es'?'Mostrar mi pestaña Oficina':'Show my Office tab'}</b><div class="muted" style="font-size:11px;font-weight:400">${lang==='es'?'Tus herramientas de oficina (gastos, pendientes…)':'Your office tools (expenses, tasks…)'}</div></span>
@@ -14612,7 +14687,7 @@ async function pageSettings(){
           <div class="muted" style="font-size:11px">${es?'Interruptor maestro. Apagado = nada sale a clientes (los reps siguen recibiendo recordatorios).':'Master switch. Off = nothing goes to customers (reps still get their reminders).'}</div></span>
         <input type="checkbox" ${on?'checked':''} onchange="setFollowupEnabled(this.checked)" style="width:22px;height:22px;min-height:0;accent-color:var(--money)"></label>
       <div class="lbl" style="margin-top:14px;font-size:11px">${es?'Enviar desde':'Send from'}</div>
-      <input id="fuFrom" value="${esc(fc.from_email||'customerservice@southwestenergy.us')}" placeholder="customerservice@southwestenergy.us">
+      <input id="fuFrom" value="${escAttr(fc.from_email||'customerservice@southwestenergy.us')}" placeholder="customerservice@southwestenergy.us">
       <div class="grid g2" style="margin-top:10px">
         <div><div class="muted" style="font-size:11px;margin-bottom:3px">${es?'Aviso de atoro — Solar (días)':'Stall reassurance — Solar (days)'}</div><input id="fuStallSolar" type="number" value="${fc.stall_days_solar??12}"></div>
         <div><div class="muted" style="font-size:11px;margin-bottom:3px">${es?'Aviso de atoro — Landscape (días)':'Stall reassurance — Landscape (days)'}</div><input id="fuStallLand" type="number" value="${fc.stall_days_landscape??7}"></div>
@@ -14672,14 +14747,14 @@ async function pageSettings(){
   setTimeout(() => { if (window.fillNotifToggles) fillNotifToggles(); }, 0);
   // ── Settings is now a MENU: each item opens its own sub-page ──
   const profileCard = `<div class="card"><div class="lbl">${lang==='es'?'Mi perfil':'My profile'}</div>
-    <div class="grid g2" style="margin-bottom:10px"><input id="myName" value="${esc(me.name)}" placeholder="Name"><input value="${esc(me.email)}" disabled></div>
-    <div class="grid g2"><input id="myTitle" value="${esc(me.title || '')}" placeholder="Title (e.g. Sales Rep)"><input id="myPhone" value="${esc(me.phone || '')}" placeholder="Phone" onblur="this.value=fmtPhone(this.value)"></div>
+    <div class="grid g2" style="margin-bottom:10px"><input id="myName" value="${escAttr(me.name)}" placeholder="Name"><input value="${escAttr(me.email)}" disabled></div>
+    <div class="grid g2"><input id="myTitle" value="${escAttr(me.title || '')}" placeholder="Title (e.g. Sales Rep)"><input id="myPhone" value="${escAttr(me.phone || '')}" placeholder="Phone" onblur="this.value=fmtPhone(this.value)"></div>
     <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="saveProfile()">${lang==='es'?'Guardar':'Save'}</button></div>`;
   const calendarCard = `<div class="card"><div class="lbl">${lang==='es'?'Sincroniza tu calendario':'Calendar sync'}</div>
     <div class="muted" style="font-size:12.5px;margin-bottom:10px">${lang==='es'?'Suscríbete una vez y tus citas del CRM aparecen en tu Google / Apple / Outlook automáticamente.':'Subscribe once and your CRM appointments show up in your Google / Apple / Outlook calendar automatically.'}</div>
     <button class="btn btn-terra btn-sm" onclick="calendarSyncModal()">${icn('calendar','',15)} ${lang==='es'?'Conectar mi calendario':'Connect my calendar'}</button></div>`;
   const others = team.filter(x => x.id !== me.id);
-  const permRow = x => `<div class="row td-srch" data-s="${esc(((x.name||'')+' '+(x.role||'')+' '+(x.email||'')).toLowerCase())}" onclick="permModal('${x.id}')" style="padding:13px 14px;border-bottom:1px solid var(--border);cursor:pointer">
+  const permRow = x => `<div class="row td-srch" data-s="${escAttr(((x.name||'')+' '+(x.role||'')+' '+(x.email||'')).toLowerCase())}" onclick="permModal('${x.id}')" style="padding:13px 14px;border-bottom:1px solid var(--border);cursor:pointer">
     <span style="min-width:0"><b style="font-size:14px">${esc(x.name)}</b><div class="muted" style="font-size:11.5px">${esc(x.role)}${x.can_see_money?' · '+(lang==='es'?'dinero':'money'):''}${!x.active?' · '+(lang==='es'?'inactivo':'inactive'):''}</div></span>
     <span class="muted" style="font-size:20px;flex-shrink:0">›</span></div>`;
   const inviteRoles = me.role === 'admin' ? ['rep','crew','ops','dealer_admin','admin'] : ['rep','crew'];
@@ -14755,7 +14830,7 @@ window.calendarSyncModal = async () => {
     <h1 class="page" style="font-size:24px">${es?'Sincroniza tu <em>calendario.</em>':'Sync your <em>calendar.</em>'}</h1>
     <div class="muted" style="margin-bottom:12px">${es?'Tus citas del CRM aparecerán en tu calendario personal — y se actualizan solas.':'Your CRM appointments will appear in your personal calendar — and stay updated automatically.'}</div>
     <div class="lbl">${es?'Tu enlace privado':'Your private link'}</div>
-    <div style="display:flex;gap:6px;margin-bottom:14px"><input id="calUrl" value="${esc(url)}" readonly style="flex:1;font-size:12px"><button class="btn btn-terra btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('calUrl').value).then(()=>toast('${es?'Copiado':'Copied'}'))">${es?'Copiar':'Copy'}</button></div>
+    <div style="display:flex;gap:6px;margin-bottom:14px"><input id="calUrl" value="${escAttr(url)}" readonly style="flex:1;font-size:12px"><button class="btn btn-terra btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('calUrl').value).then(()=>toast('${es?'Copiado':'Copied'}'))">${es?'Copiar':'Copy'}</button></div>
     <div class="lbl">Google Calendar</div>
     <div class="muted" style="font-size:12.5px;margin-bottom:10px">${es?'En la compu: calendar.google.com → “Otros calendarios” (+) → “Desde URL” → pega el enlace → Agregar.':'On desktop: calendar.google.com → “Other calendars” (+) → “From URL” → paste the link → Add.'}</div>
     <div class="lbl">iPhone / Apple</div>
@@ -14969,11 +15044,11 @@ window.dealerManageModal = (id) => {
   const es = lang === 'es';
   const d = (permDealersCache || []).find(x => x.id === id); if (!d) { toast('Dealer not found'); return; }
   const stChip = (ok, pendT, okT) => ok ? `<span class="chip" style="border-color:var(--money);color:var(--money)">${icn('check','',13)} ${okT}</span>` : `<span class="chip" style="border-color:var(--gold);color:var(--gold)">${pendT}</span>`;
-  const agrUrl = d.agreement_doc_id ? `https://www.signwell.com/app/document/${d.agreement_doc_id}` : '';
+  const agrUrl = d.agreement_doc_id ? `https://www.signwell.com/app/document/${encodeURIComponent(d.agreement_doc_id)}` : '';
   const isHouse = d.id === HOUSE_DEALER;
   dealModalHost().innerHTML = `<div class="modal-scrim" onclick="if(event.target===this)this.remove()"><div class="modal" style="max-width:500px">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
-      ${d.logo_url ? `<img src="${esc(d.logo_url)}" style="height:38px;border-radius:5px">` : `<span class="muted">${icn('bank','',26)}</span>`}
+      ${d.logo_url ? `<img src="${escAttr(d.logo_url)}" style="height:38px;border-radius:5px">` : `<span class="muted">${icn('bank','',26)}</span>`}
       <div style="min-width:0"><h2 style="margin:0;font-size:20px">${esc(d.name)}</h2>
         ${d.contact_email?`<div class="muted" style="font-size:12px">${esc(d.contact_name||'')}${d.contact_name?' · ':''}${esc(d.contact_email)}</div>`:''}</div>
     </div>
@@ -15202,8 +15277,8 @@ window.__checkForUpdate = checkForUpdate;   // test hook
    you → you drop offline within a couple seconds. No DB writes, no polling. */
 let __presCh = null;
 window.__online = new Set();
-function presDotAbs(uid){ return uid ? `<span class="pres-dot abs" data-uid="${esc(String(uid))}"></span>` : ''; }
-function presDotInline(uid){ return uid ? `<span class="pres-dot inline" data-uid="${esc(String(uid))}"></span>` : ''; }
+function presDotAbs(uid){ return uid ? `<span class="pres-dot abs" data-uid="${escAttr(String(uid))}"></span>` : ''; }
+function presDotInline(uid){ return uid ? `<span class="pres-dot inline" data-uid="${escAttr(String(uid))}"></span>` : ''; }
 function paintPresence(){
   const on = window.__online || new Set();
   document.querySelectorAll('.pres-dot[data-uid]').forEach(d => d.classList.toggle('on', on.has(d.dataset.uid)));
@@ -15814,7 +15889,7 @@ function icInjectStyle(){
     var x=document.createElement('button'); x.innerHTML='✕';
     x.style.cssText='position:absolute;top:12px;right:14px;background:rgba(0,0,0,.4);color:#fff;border:none;border-radius:50%;width:30px;height:30px;font-size:14px;cursor:pointer;line-height:1;z-index:2';
     card.appendChild(x); scrim.appendChild(card); document.body.appendChild(scrim);
-    var dismiss=function(){ scrim.remove(); markSeen(a.id); try{ SB().from('announcement_reads').upsert({announcement_id:a.id, user_id:u}); }catch(e){} };
+    var dismiss=function(){ scrim.remove(); markSeen(a.id); try{ SB().from('announcement_reads').upsert({announcement_id:a.id, user_id:u}).then(function(){},function(){}); }catch(e){} };
     x.onclick=dismiss; document.getElementById('annPopOk').onclick=dismiss; scrim.onclick=function(e){ if(e.target===scrim) dismiss(); };
   }
   if(document.readyState==='complete') setTimeout(function(){showPopupAnnouncement(0);}, 2000);

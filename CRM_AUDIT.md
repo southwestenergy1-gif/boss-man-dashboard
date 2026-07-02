@@ -8,6 +8,42 @@ Legend: **[FIXED]** applied in this pass · **[OPEN]** needs a code/infra change
 
 ---
 
+## Changelog — code fixes applied in `crm.html` (2026-07-02, second pass)
+
+Client-side, self-contained, verified to parse cleanly (headless load, 0 syntax errors). Deploy the updated `crm.html` for these to take effect.
+
+**Security**
+- Added `escJs()` (JS-string-safe encoder) and upgraded **99 attribute interpolations** from `esc()` → `escAttr()`, plus every confirmed inline `onclick` handler built from names/emails/paths (attachment filename, notification URL, chat attachments, ref chips, HDM cards, dealer agreement link, finance-plan bank, etc.). Unit-tested against 6 XSS payloads — all neutralized.
+- Email body iframe: removed `allow-popups-to-escape-sandbox` (mail links can no longer open unsandboxed) and added a "never add allow-scripts" guard comment.
+
+**Money integrity**
+- Contract preview no longer permanently mutates a deal's `sale_price` — the bump is reverted when the rep closes the preview without sending.
+- Payout approval is now an atomic compare-and-swap (`pending→approved`), so two admins can't both post the ledger (no double payment); the write error is surfaced.
+- `oblMarkPaid` records the payment before advancing/archiving the bill and bails on failure (no more silent roll-forward with no ledger row).
+- Saved-presentation save/delete now abort on a failed read instead of overwriting the whole array (fixes the "all presentations wiped" bug).
+- Quote totals rounded to whole cents at the source; negative/zero amounts rejected in sub-payments and expenses.
+- Printed proposal: no more "$-87 less than your current bill" (only shown when actually lower) and no "NaNW" when a package has no fixed panel count.
+
+**Correctness / flow**
+- **Create Job → Go to Job:** the contact page shows "Go to job" (opens it) once a job exists, "View jobs (n)" for several, and "New job" only when there are none; `createDeal` also confirms before making a *second* active job for a contact.
+- `taskEditSave` keeps a free-text crew assignee instead of wiping it; the edit dropdown now lists the crew roster.
+- `saveExpense` requires a job (no more raw UUID error on empty `deal_id`).
+- Dashboard cold-quote nudge actually fires (query returned no rows before).
+- `emailSend` reads its fields scoped to the compose modal, so an open inline reply can't hijack the recipient/body.
+- Null-guards on `advanceDeal` / `artemisDesign` (no crash when a deal isn't cached).
+
+**Timezone**
+- Task/lead/dashboard/follow-up "today" now uses El Paso local date (`dispToday()`) instead of UTC — no more evening day-flips.
+
+**Reliability**
+- Service-call "Confirmation/Report sent ✓" and the Google-review request only claim success when the webhook actually returns OK.
+- Chat send restores the typed text + tags if the insert fails (no lost messages).
+- Popup-announcement read-receipt is now actually written (was a never-awaited query).
+
+Still **[OPEN]** (need server-side changes or your decision, not done here): unauthenticated n8n webhooks, anon-executable SECURITY DEFINER functions + `cold_quotes` secret, RLS/Realtime authorization behind client-side gates, Google Maps key referrer restriction. See sections below.
+
+---
+
 ## 0. What the owner asked for — readability ("small letters", "notes not bolded", "log space") — **[FIXED]**
 
 All three complaints traced to a px-based type scale with a very low floor (8–11px on real content), note bodies rendered at regular weight, and activity/log rows capped short and tightly padded. Fixes applied (CSS + inline note templates), no redesign:
