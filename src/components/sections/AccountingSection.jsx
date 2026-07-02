@@ -1,6 +1,7 @@
 import React from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { DollarSign, TrendingUp } from 'lucide-react';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+
+const fmtMoney = (n) => `$${Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 
 export default function AccountingSection({ data, businessTarget, color }) {
   const expenseData = Object.entries(data.expenses).map(([name, value]) => ({
@@ -10,6 +11,8 @@ export default function AccountingSection({ data, businessTarget, color }) {
 
   const COLORS = ['#00FF88', '#00D4FF', '#FF00FF', '#FFB800'];
   const totalExpenses = Object.values(data.expenses).reduce((a, b) => a + b, 0);
+  const netProfit = data.revenueMTD - totalExpenses;
+  const profitMargin = data.revenueMTD > 0 ? Math.round((netProfit / data.revenueMTD) * 100) : 0;
 
   return (
     <section className="group relative">
@@ -29,15 +32,15 @@ export default function AccountingSection({ data, businessTarget, color }) {
         {/* Revenue Cards */}
         <div className="grid grid-cols-2 gap-3 mb-6">
           <div className="bg-gray-950/50 border border-gray-700/30 rounded-lg p-4">
-            <p className="text-gray-500 text-xs font-mono uppercase mb-1">MTD Revenue</p>
-            <div className="text-2xl font-bold text-green-400">
+            <p className="text-slate-300 text-[13px] font-semibold uppercase tracking-wide mb-1">MTD Revenue</p>
+            <div className="text-3xl font-bold text-green-400">
               ${(data.revenueMTD / 1000).toFixed(1)}k
             </div>
           </div>
 
           <div className="bg-gray-950/50 border border-gray-700/30 rounded-lg p-4">
-            <p className="text-gray-500 text-xs font-mono uppercase mb-1">YTD Revenue</p>
-            <div className="text-2xl font-bold text-green-400">
+            <p className="text-slate-300 text-[13px] font-semibold uppercase tracking-wide mb-1">YTD Revenue</p>
+            <div className="text-3xl font-bold text-green-400">
               ${(data.revenueYTD / 1000).toFixed(1)}k
             </div>
           </div>
@@ -45,13 +48,13 @@ export default function AccountingSection({ data, businessTarget, color }) {
 
         {/* Revenue vs Target Progress */}
         <div className="bg-gray-950/50 border border-gray-700/30 rounded-lg p-4 mb-6">
-          <p className="text-gray-500 text-xs font-mono uppercase mb-2">Monthly Target Progress</p>
+          <p className="text-slate-300 text-[13px] font-semibold uppercase tracking-wide mb-2">Monthly Target Progress</p>
           <div className="flex items-end gap-3 mb-3">
-            <div className="text-2xl font-black" style={{ color }}>
+            <div className="text-3xl font-black" style={{ color }}>
               {data.monthlyTargetPercent}%
             </div>
-            <p className="text-gray-600 text-xs">
-              ${(data.revenueMTD / 1000).toFixed(1)}k of ${(businessTarget / 1000).toFixed(0)}k
+            <p className="text-slate-400 text-sm">
+              {fmtMoney(data.revenueMTD)} of {fmtMoney(businessTarget)}
             </p>
           </div>
 
@@ -70,7 +73,10 @@ export default function AccountingSection({ data, businessTarget, color }) {
 
         {/* Expenses Breakdown */}
         <div className="mb-4">
-          <p className="text-gray-500 text-xs font-mono uppercase mb-3">Expense Breakdown</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-slate-300 text-[13px] font-semibold uppercase tracking-wide">Expense Breakdown</p>
+            <p className="text-slate-200 text-sm font-semibold">Total: {fmtMoney(totalExpenses)}</p>
+          </div>
           <div className="h-40 flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -88,6 +94,19 @@ export default function AccountingSection({ data, businessTarget, color }) {
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1e293b',
+                    border: `1px solid ${color}`,
+                    borderRadius: '8px',
+                    color: '#f1f5f9',
+                    fontSize: 14
+                  }}
+                  formatter={(value, name) => [
+                    `${fmtMoney(value)} (${Math.round((value / totalExpenses) * 100)}%)`,
+                    name
+                  ]}
+                />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -95,13 +114,13 @@ export default function AccountingSection({ data, businessTarget, color }) {
           {/* Expense Legend */}
           <div className="grid grid-cols-2 gap-2">
             {expenseData.map((expense, idx) => (
-              <div key={idx} className="flex items-center gap-2 text-xs">
+              <div key={idx} className="flex items-center gap-2 text-sm">
                 <div
-                  className="w-3 h-3 rounded-full"
+                  className="w-3 h-3 rounded-full flex-shrink-0"
                   style={{ backgroundColor: COLORS[idx % COLORS.length] }}
                 ></div>
-                <span className="text-gray-400">
-                  {expense.name}: ${(expense.value / 1000).toFixed(1)}k
+                <span className="text-slate-300">
+                  {expense.name}: <span className="font-semibold text-slate-100">{fmtMoney(expense.value)}</span>
                 </span>
               </div>
             ))}
@@ -110,13 +129,13 @@ export default function AccountingSection({ data, businessTarget, color }) {
 
         {/* Profit Margin */}
         <div className="bg-gray-950/50 border border-gray-700/30 rounded-lg p-4">
-          <p className="text-gray-500 text-xs font-mono uppercase mb-2">Profit Margin</p>
-          <div className="flex items-center gap-2">
+          <p className="text-slate-300 text-[13px] font-semibold uppercase tracking-wide mb-2">Profit Margin (MTD)</p>
+          <div className="flex items-center gap-3">
             <div className="text-3xl font-black text-purple-400">
-              {data.profitMarginPercent}%
+              {profitMargin}%
             </div>
-            <p className="text-gray-600 text-xs">
-              Net margin on ${(data.revenueMTD - totalExpenses).toFixed(0)} profit
+            <p className="text-slate-400 text-sm">
+              Net profit of <span className="font-semibold text-slate-200">{fmtMoney(netProfit)}</span> on {fmtMoney(data.revenueMTD)} revenue
             </p>
           </div>
         </div>

@@ -2,11 +2,11 @@
 
 ## What Is This?
 
-**BOSS MAN** is an insane, cyberpunk-aesthetic operations dashboard built for Christopher's Southwest Energy business. It displays real-time metrics across three business units (Solar, Construction, Aqua Systems) with interactive tabs, beautiful charts, and a futuristic vibe that looks like a tech startup's command center.
+**BOSS MAN** is an insane, cyberpunk-aesthetic operations dashboard built for Christopher's Southwest Energy business. It displays real-time metrics across three business units (Solar, Construction, Home Improvement) with interactive tabs, beautiful charts, and a futuristic vibe that looks like a tech startup's command center.
 
 ## Features
 
-✅ **Business Selector** - Switch between Solar, Construction, and Aqua Systems with animated tabs  
+✅ **Business Selector** - Switch between Solar, Construction, and Home Improvement with animated tabs  
 ✅ **Leads & Pipeline** - New leads, pipeline breakdown, win rates, sales cycle metrics  
 ✅ **Accounting** - Revenue (MTD/YTD), expenses, profit margins, target progress  
 ✅ **Unit Economics** - CAC, LTV, payback period, LTV:CAC ratio  
@@ -88,7 +88,7 @@ npm run build
 
 ### Switching Between Businesses
 
-Click the business tabs at the top (Solar | Construction | Aqua Systems) to switch between different business units. All metrics update instantly with smooth animations.
+Click the business tabs at the top (Solar | Construction | Home Improvement) to switch between different business units. All metrics update instantly with smooth animations.
 
 ### Understanding the Metrics
 

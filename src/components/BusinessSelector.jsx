@@ -7,7 +7,8 @@ export default function BusinessSelector({ businesses, active, onSelect }) {
         <button
           key={key}
           onClick={() => onSelect(key)}
-          className={`px-5 py-2.5 rounded-md font-medium text-sm transition-all duration-200 border ${
+          aria-pressed={active === key}
+          className={`px-5 py-2.5 rounded-md font-medium text-sm transition-all duration-200 border focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 ${
             active === key
               ? 'bg-slate-800 text-slate-50 border-slate-700'
               : 'bg-transparent text-slate-400 border-slate-700 hover:text-slate-300 hover:border-slate-600'

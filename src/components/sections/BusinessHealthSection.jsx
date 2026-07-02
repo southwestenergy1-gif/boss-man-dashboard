@@ -1,16 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Zap } from 'lucide-react';
 
 export default function BusinessHealthSection({ data, color }) {
-  const [pulse, setPulse] = useState(false);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setPulse(prev => !prev);
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
-
   return (
     <section className="group relative">
       {/* Glow effect */}
@@ -30,7 +21,7 @@ export default function BusinessHealthSection({ data, color }) {
         <div className="mb-6 bg-gray-950/50 border border-gray-700/30 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <Zap className="w-4 h-4" style={{ color }} />
-            <p className="text-gray-500 text-xs font-mono uppercase">Next Milestone</p>
+            <p className="text-slate-300 text-[13px] font-semibold uppercase tracking-wide">Next Milestone</p>
           </div>
           <p className="text-lg font-bold text-white">{data.nextMilestone}</p>
         </div>
@@ -45,15 +36,15 @@ export default function BusinessHealthSection({ data, color }) {
         {/* Status Indicator */}
         <div className="mt-6 bg-gray-950/50 border border-gray-700/30 rounded-lg p-4 flex items-center gap-3">
           <div
-            className={`w-4 h-4 rounded-full ${pulse ? 'animate-pulse' : ''}`}
+            className="w-4 h-4 rounded-full animate-pulse flex-shrink-0"
             style={{
               backgroundColor: color,
-              boxShadow: pulse ? `0 0 10px ${color}` : 'none'
+              boxShadow: `0 0 10px ${color}`
             }}
           ></div>
           <div>
-            <p className="text-gray-500 text-xs font-mono uppercase">Status</p>
-            <p className="text-green-400 font-mono text-sm">Systems Operational • All metrics tracking</p>
+            <p className="text-slate-300 text-[13px] font-semibold uppercase tracking-wide">Status</p>
+            <p className="text-green-400 text-sm font-medium">Demo metrics — connect live APIs to track in real time</p>
           </div>
         </div>
       </div>
@@ -65,7 +56,7 @@ function MetricItem({ metric, color }) {
   return (
     <div className="bg-gray-950/50 border border-gray-700/30 rounded-lg p-4 hover:border-purple-500/50 transition group">
       <div className="flex items-center justify-between mb-2">
-        <p className="text-gray-500 text-xs font-mono uppercase">{metric.label}</p>
+        <p className="text-slate-300 text-[13px] font-semibold uppercase tracking-wide">{metric.label}</p>
         <span className="text-lg">{metric.icon}</span>
       </div>
       <div className="text-2xl font-black" style={{ color }}>

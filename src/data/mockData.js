@@ -38,6 +38,8 @@ export const mockData = {
     leads: {
       newThisWeek: 15,
       trendPercent: 12, // +12% vs last week
+      pipelineTrendPercent: 8, // pipeline value vs last week
+      winRateTrendPercent: 5, // win rate vs last month
       pipelineValue: 120000,
       pipelineBreakdown: [
         { stage: "Qualified", value: 45000, count: 3 },
@@ -53,6 +55,7 @@ export const mockData = {
     accounting: {
       revenueMTD: 42500, // March so far
       revenueYTD: 89000, // Jan + Feb + March
+      revenueTrendPercent: 11, // MTD revenue vs same point last month
       revenueTarget: 50000,
       expenses: {
         salaries: 15000,
@@ -99,6 +102,8 @@ export const mockData = {
     leads: {
       newThisWeek: 8,
       trendPercent: -5, // -5% vs last week
+      pipelineTrendPercent: -4, // pipeline value vs last week
+      winRateTrendPercent: -3, // win rate vs last month
       pipelineValue: 85000,
       pipelineBreakdown: [
         { stage: "Qualified", value: 32000, count: 2 },
@@ -113,6 +118,7 @@ export const mockData = {
     accounting: {
       revenueMTD: 36200,
       revenueYTD: 72800,
+      revenueTrendPercent: 6, // MTD revenue vs same point last month
       revenueTarget: 40000,
       expenses: {
         salaries: 12000,
@@ -156,6 +162,8 @@ export const mockData = {
     leads: {
       newThisWeek: 12,
       trendPercent: 15,
+      pipelineTrendPercent: 9, // pipeline value vs last week
+      winRateTrendPercent: 2, // win rate vs last month
       pipelineValue: 95000,
       pipelineBreakdown: [
         { stage: "Qualified", value: 38000, count: 3 },
@@ -170,6 +178,7 @@ export const mockData = {
     accounting: {
       revenueMTD: 28500,
       revenueYTD: 58200,
+      revenueTrendPercent: 8, // MTD revenue vs same point last month
       revenueTarget: 35000,
       expenses: {
         salaries: 9500,

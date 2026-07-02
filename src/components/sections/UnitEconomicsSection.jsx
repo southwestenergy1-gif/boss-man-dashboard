@@ -28,6 +28,9 @@ export default function UnitEconomicsSection({ data, color }) {
     }
   ];
 
+  // Industry rule of thumb: LTV:CAC of 3:1 or better is healthy
+  const isHealthy = data.ltv_cac_ratio >= 3;
+
   return (
     <section className="group relative">
       {/* Glow effect */}
@@ -51,19 +54,19 @@ export default function UnitEconomicsSection({ data, color }) {
 
         {/* Key Insight */}
         <div className="mt-6 bg-gray-950/50 border border-gray-700/30 rounded-lg p-4">
-          <p className="text-gray-500 text-xs font-mono uppercase mb-2">Health Check</p>
+          <p className="text-slate-300 text-[13px] font-semibold uppercase tracking-wide mb-2">Health Check</p>
           <div className="flex items-center gap-2">
-            {data.ltv_cac_ratio > 20 ? (
+            {isHealthy ? (
               <>
-                <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-                <p className="text-green-400 font-mono text-sm">
-                  Excellent LTV:CAC ratio ({data.ltv_cac_ratio}:1) — highly profitable acquisition model
+                <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse flex-shrink-0"></div>
+                <p className="text-green-400 text-sm font-medium">
+                  Healthy LTV:CAC ratio ({data.ltv_cac_ratio}:1) — profitable acquisition model (3:1+ is the benchmark)
                 </p>
               </>
             ) : (
               <>
-                <div className="w-3 h-3 bg-yellow-400 rounded-full animate-pulse"></div>
-                <p className="text-yellow-400 font-mono text-sm">
+                <div className="w-3 h-3 bg-yellow-400 rounded-full animate-pulse flex-shrink-0"></div>
+                <p className="text-yellow-400 text-sm font-medium">
                   Monitor LTV:CAC ratio ({data.ltv_cac_ratio}:1) — aim for 3:1 or higher
                 </p>
               </>
@@ -79,13 +82,13 @@ function MetricCard({ metric, color }) {
   return (
     <div className="bg-gray-950/50 border border-gray-700/30 rounded-lg p-4 hover:border-purple-500/50 transition group">
       <div className="flex items-start justify-between mb-3">
-        <p className="text-gray-500 text-xs font-mono uppercase">{metric.label}</p>
+        <p className="text-slate-300 text-[13px] font-semibold uppercase tracking-wide">{metric.label}</p>
         <span className="text-2xl">{metric.icon}</span>
       </div>
-      <div className="text-2xl font-black mb-1" style={{ color }}>
+      <div className="text-3xl font-black mb-1" style={{ color }}>
         {metric.value}
       </div>
-      <p className="text-gray-600 text-xs">{metric.description}</p>
+      <p className="text-slate-400 text-sm">{metric.description}</p>
     </div>
   );
 }

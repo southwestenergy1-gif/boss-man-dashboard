@@ -14,7 +14,7 @@ body{background:#060608;color:#eeeef5;font-family:'Syne',sans-serif;min-height:1
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#0d0d12}::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
 .bebas{font-family:'Bebas Neue',sans-serif;letter-spacing:2px}
 .mono{font-family:'Syne Mono',monospace}
-.btn{border:none;border-radius:8px;cursor:pointer;font-family:'Syne',sans-serif;font-weight:600;transition:all .2s;font-size:13px;padding:8px 16px}
+.btn{border:none;border-radius:8px;cursor:pointer;font-family:'Syne',sans-serif;font-weight:600;transition:all .2s;font-size:14px;padding:9px 16px}
 .btn-gold{background:rgba(245,200,66,.12);border:1px solid rgba(245,200,66,.35);color:#f5c842}
 .btn-gold:hover{background:rgba(245,200,66,.25)}
 .btn-green{background:rgba(61,255,160,.1);border:1px solid rgba(61,255,160,.25);color:#3dffa0}
@@ -24,22 +24,22 @@ body{background:#060608;color:#eeeef5;font-family:'Syne',sans-serif;min-height:1
 .btn-solid{background:#f5c842;color:#000;border:none}
 .btn-solid:hover{background:#ffd966;transform:translateY(-1px)}
 .btn-solid-red{background:#ff4d6d;color:#fff;border:none}
-.tab-btn{background:none;border:none;cursor:pointer;padding:10px 18px;font-family:'Syne Mono',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;transition:all .2s;border-bottom:2px solid transparent;color:#5a5a72}
+.tab-btn{background:none;border:none;cursor:pointer;padding:10px 18px;font-family:'Syne Mono',monospace;font-size:13px;letter-spacing:2px;text-transform:uppercase;transition:all .2s;border-bottom:2px solid transparent;color:#9a9ab0}
 .tab-btn.active{color:#f5c842;border-bottom-color:#f5c842}
 .tab-btn:hover:not(.active){color:#aaa}
-.input-field{background:#12121c;border:1px solid rgba(255,255,255,.1);color:#eeeef5;border-radius:8px;padding:9px 12px;font-family:'Syne Mono',monospace;font-size:13px;width:100%;outline:none;transition:border-color .2s}
+.input-field{background:#12121c;border:1px solid rgba(255,255,255,.1);color:#eeeef5;border-radius:8px;padding:10px 12px;font-family:'Syne Mono',monospace;font-size:14px;width:100%;outline:none;transition:border-color .2s}
 .input-field:focus{border-color:rgba(245,200,66,.5)}
-.select-field{background:#12121c;border:1px solid rgba(255,255,255,.1);color:#eeeef5;border-radius:8px;padding:9px 12px;font-family:'Syne Mono',monospace;font-size:13px;width:100%;outline:none}
+.select-field{background:#12121c;border:1px solid rgba(255,255,255,.1);color:#eeeef5;border-radius:8px;padding:10px 12px;font-family:'Syne Mono',monospace;font-size:14px;width:100%;outline:none}
 .debt-card{background:#0d0d12;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:18px;transition:all .2s}
 .debt-card:hover{border-color:rgba(245,200,66,.15)}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px)}
 .modal{background:#0d0d12;border:1px solid rgba(245,200,66,.2);border-radius:18px;padding:26px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto}
 .modal-title{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:2px;margin-bottom:4px}
-.modal-sub{font-family:'Syne Mono',monospace;font-size:11px;color:#5a5a72;margin-bottom:20px;letter-spacing:1px}
-.field-label{font-family:'Syne Mono',monospace;font-size:9px;letter-spacing:2px;color:#5a5a72;margin-bottom:5px;text-transform:uppercase}
+.modal-sub{font-family:'Syne Mono',monospace;font-size:13px;color:#9a9ab0;margin-bottom:20px;letter-spacing:1px}
+.field-label{font-family:'Syne Mono',monospace;font-size:11px;letter-spacing:2px;color:#9a9ab0;margin-bottom:5px;text-transform:uppercase}
 .field-wrap{margin-bottom:12px}
 .color-dot{width:12px;height:12px;border-radius:50%;display:inline-block;flex-shrink:0}
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:11px 22px;border-radius:30px;font-family:'Syne',sans-serif;font-weight:600;font-size:13px;z-index:100;pointer-events:none;white-space:nowrap;animation:toastIn .3s ease;color:#000}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:11px 22px;border-radius:30px;font-family:'Syne',sans-serif;font-weight:600;font-size:14px;z-index:100;pointer-events:none;white-space:nowrap;animation:toastIn .3s ease;color:#000}
 @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 .icon-btn{background:none;border:none;cursor:pointer;padding:4px 6px;border-radius:6px;font-size:14px;transition:background .15s;line-height:1}
 .icon-btn:hover{background:rgba(255,255,255,.08)}
@@ -70,7 +70,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const load=(k,d)=>{try{const s=localStorage.getItem(k);return s?JSON.parse(s):d}catch{return d}};
 const EMPTY_DEBT={name:"",original:"",current:"",minPayment:"",targetMonth:"",color:"#ff4d6d",notes:"",priority:99};
 
-export default function App(){
+function App(){
   const[debts,setDebts]=useState(()=>load(K_D,DEFAULT_DEBTS));
   const[payments,setPayments]=useState(()=>load(K_P,[]));
   const[income,setIncome]=useState(()=>load(K_I,[]));
@@ -133,7 +133,7 @@ export default function App(){
     {toast&&<div className="toast" style={{background:toast.color}}>{toast.msg}</div>}
     <div style={{padding:"24px 20px 0",borderBottom:"1px solid rgba(255,255,255,.05)",background:"linear-gradient(180deg,rgba(245,200,66,.03),transparent)"}}>
       <div style={{maxWidth:880,margin:"0 auto"}}>
-        <div className="mono" style={{fontSize:9,letterSpacing:4,color:"#f5c842",marginBottom:6}}>SOUTHWEST ENERGY · DEBT TRACKER</div>
+        <div className="mono" style={{fontSize:11,letterSpacing:4,color:"#f5c842",marginBottom:6}}>SOUTHWEST ENERGY · DEBT TRACKER</div>
         <div className="bebas" style={{fontSize:"clamp(38px,7vw,72px)",lineHeight:1,marginBottom:18}}>
           <span style={{color:"#eeeef5"}}>ROAD TO </span>
           <span style={{WebkitTextStroke:"1px #f5c842",color:"transparent"}}>ZERO</span>
@@ -141,13 +141,13 @@ export default function App(){
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:8,marginBottom:18}}>
           {[{l:"Debt Left",v:fmt(totCurr),c:"#ff4d6d"},{l:"Paid Down",v:fmt(totPaid),c:"#3dffa0"},{l:"% Done",v:pct(totPaid,totOrig)+"%",c:"#f5c842"},{l:"Income In",v:fmt(totInc),c:"#4da6ff"},{l:"Active",v:activeD.length+" debts",c:"#ab47bc"}].map(s=>(
             <div key={s.l} style={{background:"#0d0d12",border:"1px solid rgba(255,255,255,.05)",borderRadius:10,padding:"11px 13px"}}>
-              <div className="mono" style={{fontSize:8,letterSpacing:2,color:"#5a5a72",marginBottom:3,textTransform:"uppercase"}}>{s.l}</div>
-              <div className="bebas" style={{fontSize:22,color:s.c,lineHeight:1}}>{s.v}</div>
+              <div className="mono" style={{fontSize:10,letterSpacing:2,color:"#9a9ab0",marginBottom:4,textTransform:"uppercase"}}>{s.l}</div>
+              <div className="bebas" style={{fontSize:24,color:s.c,lineHeight:1}}>{s.v}</div>
             </div>
           ))}
         </div>
         <div style={{marginBottom:18}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,fontSize:10,color:"#5a5a72"}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:5,fontSize:12,color:"#9a9ab0"}}>
             <span className="mono">OVERALL PROGRESS</span>
             <span className="mono">{pct(totPaid,totOrig)}% · {fmt(totPaid)} of {fmt(totOrig)}</span>
           </div>
@@ -165,7 +165,7 @@ export default function App(){
 
     <div style={{maxWidth:880,margin:"0 auto",padding:"20px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
-        <div className="mono" style={{fontSize:10,color:"#5a5a72"}}>
+        <div className="mono" style={{fontSize:12,color:"#9a9ab0"}}>
           {tab==="debts"&&`${activeD.length} active · ${clearedD.length} cleared`}
           {tab==="history"&&`${payments.length} payments · ${fmt(payments.reduce((s,p)=>s+p.amount,0))} total`}
           {tab==="income"&&`${income.length} entries · ${fmt(totInc)} total`}
@@ -188,16 +188,16 @@ export default function App(){
                   <div style={{flex:1,minWidth:200}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
                       <div className="color-dot" style={{background:debt.color}}/>
-                      <span className="bebas" style={{fontSize:10,color:"#f5c842",opacity:.5}}>#{debt.priority}</span>
-                      <span style={{fontSize:15,fontWeight:700}}>{debt.name}</span>
-                      {debt.targetMonth&&<span className="mono" style={{fontSize:9,padding:"2px 7px",background:"rgba(255,255,255,.05)",borderRadius:8,color:"#5a5a72"}}>{debt.targetMonth}</span>}
+                      <span className="bebas" style={{fontSize:13,color:"#f5c842",opacity:.6}}>#{debt.priority}</span>
+                      <span style={{fontSize:17,fontWeight:700}}>{debt.name}</span>
+                      {debt.targetMonth&&<span className="mono" style={{fontSize:11,padding:"3px 9px",background:"rgba(255,255,255,.06)",borderRadius:8,color:"#9a9ab0"}}>{debt.targetMonth}</span>}
                     </div>
-                    <div style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:debt.notes?6:0}}>
-                      <div><div className="mono" style={{fontSize:8,color:"#5a5a72",marginBottom:1}}>REMAINING</div><div className="bebas" style={{fontSize:26,color:debt.color,lineHeight:1}}>{fmt(Number(debt.current))}</div></div>
-                      {paid>0&&<div><div className="mono" style={{fontSize:8,color:"#5a5a72",marginBottom:1}}>PAID</div><div className="bebas" style={{fontSize:26,color:"#3dffa0",lineHeight:1}}>{fmt(paid)}</div></div>}
-                      {Number(debt.minPayment)>0&&<div><div className="mono" style={{fontSize:8,color:"#5a5a72",marginBottom:1}}>MIN/MO</div><div className="bebas" style={{fontSize:26,color:"#4da6ff",lineHeight:1}}>{fmt(Number(debt.minPayment))}</div></div>}
+                    <div style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:debt.notes?8:0}}>
+                      <div><div className="mono" style={{fontSize:10,color:"#9a9ab0",marginBottom:2}}>REMAINING</div><div className="bebas" style={{fontSize:26,color:debt.color,lineHeight:1}}>{fmt(Number(debt.current))}</div></div>
+                      {paid>0&&<div><div className="mono" style={{fontSize:10,color:"#9a9ab0",marginBottom:2}}>PAID</div><div className="bebas" style={{fontSize:26,color:"#3dffa0",lineHeight:1}}>{fmt(paid)}</div></div>}
+                      {Number(debt.minPayment)>0&&<div><div className="mono" style={{fontSize:10,color:"#9a9ab0",marginBottom:2}}>MIN/MO</div><div className="bebas" style={{fontSize:26,color:"#4da6ff",lineHeight:1}}>{fmt(Number(debt.minPayment))}</div></div>}
                     </div>
-                    {debt.notes&&<div style={{fontSize:11,color:"#5a5a72",fontStyle:"italic"}}>📝 {debt.notes}</div>}
+                    {debt.notes&&<div style={{fontSize:14,color:"#f0f0f8",fontWeight:700,lineHeight:1.5,background:"rgba(245,200,66,.08)",border:"1px solid rgba(245,200,66,.18)",borderRadius:8,padding:"8px 12px",display:"inline-block"}}>📝 {debt.notes}</div>}
                   </div>
                   <div style={{display:"flex",gap:6,flexShrink:0}}>
                     <button className="btn btn-gold" style={{fontSize:11,padding:"6px 12px"}} onClick={()=>openPayment(debt.id)}>+ PAY</button>
@@ -207,10 +207,10 @@ export default function App(){
                 </div>
                 <div style={{marginTop:12}}>
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                    <span className="mono" style={{fontSize:8,color:"#5a5a72"}}>{p}% PAID OFF</span>
-                    <span className="mono" style={{fontSize:8,color:"#5a5a72"}}>ORIGINAL: {fmt(Number(debt.original))}</span>
+                    <span className="mono" style={{fontSize:10,color:"#9a9ab0"}}>{p}% PAID OFF</span>
+                    <span className="mono" style={{fontSize:10,color:"#9a9ab0"}}>ORIGINAL: {fmt(Number(debt.original))}</span>
                   </div>
-                  <div style={{height:3,background:"#1a1a24",borderRadius:2,overflow:"hidden"}}>
+                  <div style={{height:5,background:"#1a1a24",borderRadius:3,overflow:"hidden"}}>
                     <div style={{height:"100%",width:Math.max(p>0?2:0,p)+"%",background:`linear-gradient(90deg,${debt.color}66,${debt.color})`,borderRadius:2,transition:"width .6s ease"}}/>
                   </div>
                 </div>
@@ -218,12 +218,12 @@ export default function App(){
             );
           })}
           {clearedD.length>0&&<>
-            <div className="mono" style={{fontSize:9,letterSpacing:3,color:"#3dffa0",marginTop:4,marginBottom:4}}>✓ CLEARED</div>
+            <div className="mono" style={{fontSize:11,letterSpacing:3,color:"#3dffa0",marginTop:4,marginBottom:4}}>✓ CLEARED</div>
             {clearedD.map(d=>(
               <div key={d.id} style={{background:"#0a120a",border:"1px solid rgba(61,255,160,.12)",borderRadius:12,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",opacity:.75}}>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                   <span style={{color:"#3dffa0",fontWeight:700}}>✓ {d.name}</span>
-                  <span className="mono" style={{fontSize:10,color:"#3dffa0"}}>{fmt(Number(d.original))}</span>
+                  <span className="mono" style={{fontSize:12,color:"#3dffa0"}}>{fmt(Number(d.original))}</span>
                 </div>
                 <div style={{display:"flex",gap:4}}>
                   <button className="icon-btn" onClick={()=>openEditDebt(d)}>✏️</button>
@@ -237,13 +237,13 @@ export default function App(){
       )}
 
       {tab==="history"&&(
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
           {payments.length===0?<div style={{textAlign:"center",padding:"60px 20px",color:"#5a5a72"}}><div style={{fontSize:40,marginBottom:12}}>📋</div><div>No payments yet!</div></div>
           :payments.map(p=>(
-            <div key={p.id} style={{background:"#0d0d12",border:"1px solid rgba(255,255,255,.05)",borderRadius:12,padding:"13px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
-              <div><div style={{fontWeight:600,fontSize:14}}>{p.debtName}</div><div className="mono" style={{fontSize:10,color:"#5a5a72",marginTop:2}}>{p.date}{p.note?` · ${p.note}`:""}</div></div>
+            <div key={p.id} style={{background:"#0d0d12",border:"1px solid rgba(255,255,255,.05)",borderRadius:12,padding:"16px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+              <div><div style={{fontWeight:700,fontSize:15}}>{p.debtName}</div><div className="mono" style={{fontSize:12,color:"#9a9ab0",marginTop:3}}>{p.date}{p.note?` · ${p.note}`:""}</div></div>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <div className="bebas" style={{fontSize:22,color:"#3dffa0"}}>-{fmt(p.amount)}</div>
+                <div className="bebas" style={{fontSize:24,color:"#3dffa0"}}>-{fmt(p.amount)}</div>
                 <button className="icon-btn" onClick={()=>deletePayment(p)}>↩️</button>
               </div>
             </div>
@@ -252,13 +252,13 @@ export default function App(){
       )}
 
       {tab==="income"&&(
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
           {income.length===0?<div style={{textAlign:"center",padding:"60px 20px",color:"#5a5a72"}}><div style={{fontSize:40,marginBottom:12}}>💰</div><div>No income yet. Close that first deal!</div></div>
           :income.map(inc=>(
-            <div key={inc.id} style={{background:"#0d0d12",border:"1px solid rgba(61,255,160,.08)",borderRadius:12,padding:"13px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
-              <div><div style={{fontWeight:600,fontSize:14}}>{inc.source}</div><div className="mono" style={{fontSize:10,color:"#5a5a72",marginTop:2}}>{inc.date}{inc.note?` · ${inc.note}`:""}</div></div>
+            <div key={inc.id} style={{background:"#0d0d12",border:"1px solid rgba(61,255,160,.08)",borderRadius:12,padding:"16px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+              <div><div style={{fontWeight:700,fontSize:15}}>{inc.source}</div><div className="mono" style={{fontSize:12,color:"#9a9ab0",marginTop:3}}>{inc.date}{inc.note?` · ${inc.note}`:""}</div></div>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <div className="bebas" style={{fontSize:22,color:"#4da6ff"}}>+{fmt(inc.amount)}</div>
+                <div className="bebas" style={{fontSize:24,color:"#4da6ff"}}>+{fmt(inc.amount)}</div>
                 <button className="icon-btn" onClick={()=>{setIncome(p=>p.filter(x=>x.id!==inc.id));showT("Removed","#ff4d6d")}}>🗑️</button>
               </div>
             </div>
@@ -338,7 +338,7 @@ export default function App(){
       <div className="overlay" onClick={()=>setConfirm(null)}>
         <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:360}}>
           <div className="modal-title" style={{color:"#ff4d6d"}}>ARE YOU SURE?</div>
-          <div style={{color:"#5a5a72",fontSize:13,lineHeight:1.6,marginBottom:20,marginTop:8}}>{confirm.msg}</div>
+          <div style={{color:"#c8c8d8",fontSize:14,lineHeight:1.6,marginBottom:20,marginTop:8}}>{confirm.msg}</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <button className="btn" style={{background:"none",border:"1px solid #333",color:"#888"}} onClick={()=>setConfirm(null)}>Cancel</button>
             <button className="btn btn-solid-red" onClick={confirm.onConfirm}>Yes, Confirm</button>
