@@ -2795,7 +2795,10 @@ window.fbDealSave = async () => {
     // (no more blank-source native deals that need a manual reconcile).
     const fbSrc = (typeof fbIsIG==='function' && fbIsIG(lead)) ? 'instagram' : 'facebook_lead';
     let clientId = lead.client_id || null;
-    if (clientId) { try { await sb.from('clients').update({ name, phone: phone||null, source: fbSrc }).eq('id', clientId); } catch(_){} }
+    if (clientId) {
+      const { error: cuErr } = await sb.from('clients').update({ name, phone: phone||null, source: fbSrc }).eq('id', clientId);
+      if (cuErr) toast(es?'Aviso: no se pudo actualizar el contacto ('+cuErr.message+')':'Note: couldn\'t update the contact ('+cuErr.message+')');   // was silently swallowed → deal would point at stale name/phone
+    }
     else {
       const { data: c, error: ce } = await sb.from('clients').insert({ name, phone, source: fbSrc, created_by: me.id }).select().single();
       if (ce) throw ce; clientId = c.id;
@@ -9046,7 +9049,9 @@ window.toggleAutomation = async (id, src, on, isEmail) => {
     if (!cfg0.enabled) {
       if (!confirm(lang==='es'?'Esto enviará correos REALES a tus clientes. ¿Encender los correos automáticos a clientes?':'This will send REAL emails to your customers. Turn on automated customer emails now?')) { render(); return; }
       cfg0.enabled = true;
-      await sb.from('app_settings').update({ value: cfg0 }).eq('key','followups');
+      const { error: mErr } = await sb.from('app_settings').update({ value: cfg0 }).eq('key','followups');
+      if (mErr) { toast(mErr.message); render(); return; }   // don't flip the automation on if the master-enable write failed
+      settings.followups = cfg0;
     }
   }
   if (src === 'seq') {
