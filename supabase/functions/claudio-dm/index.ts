@@ -16,6 +16,8 @@ const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers
 const J = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { "Content-Type": "application/json", ...CORS } });
 const NAME = "Claudio 🤖";
 const DEALER = "bfdaec29-68bb-4b91-9ade-2a34b45a02c2";
+// Claudio's own profile id — used to attribute the timeline note when he sends an email.
+const CLAUDIO_ID = "78de958c-aa36-455e-9d4d-f1cf1647f714";
 // Union of every real pipeline stage across deal types (from app_settings.milestones). The old
 // list was landscape-only and omitted the actual solar ladder, so Claudio couldn't move a solar
 // job to its real stages. claudio_action validates the chosen stage against the deal's own type.
