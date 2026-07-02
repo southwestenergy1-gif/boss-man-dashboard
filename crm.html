@@ -1770,7 +1770,9 @@ async function loadMyMailbox(){
   if (inboxState.myMailbox) return inboxState.myMailbox;
   let { data } = await sb.from('email_accounts').select('email_address').eq('profile_id', me.id).limit(1);
   if ((!data || !data.length) && ['admin', 'ops'].includes(me.role)) {
-    ({ data } = await sb.from('email_accounts').select('email_address').limit(1)); // privileged: send as the house mailbox
+    // privileged fallback: send as the house mailbox — order it so it's the SAME mailbox every time
+    // (an unordered LIMIT 1 made the From-address nondeterministic across page loads).
+    ({ data } = await sb.from('email_accounts').select('email_address').order('created_at', { ascending: true }).limit(1));
   }
   inboxState.myMailbox = (data && data[0] && data[0].email_address) || null;
   return inboxState.myMailbox;
@@ -1800,7 +1802,11 @@ async function loadInboxList(){
   const F = inboxState.filters || {};
   if (F.unread) q = q.eq('is_unread', true);
   if (F.attach) q = q.eq('has_attachments', true);
-  const { data: threads } = await q;
+  const { data: threads, error: inboxErr } = await q;
+  if (inboxErr) {   // don't show an empty "Nothing here" that looks like a clean inbox when the load actually failed
+    host.innerHTML = `<div class="ibx-empty">${icn('mail','',28)}<div style="margin-top:8px">Couldn't load your mail — check your connection and try again.</div><div class="muted" style="font-size:11px;margin-top:4px">${esc(inboxErr.message||'')}</div></div>`;
+    return;
+  }
   const list = (threads || []).map(t => ({ ...t, display: emailWho(t) }));
   host.innerHTML = list.length ? list.map(threadRow).join('')
     : `<div class="ibx-empty">${icn('mail','',28)}<div style="margin-top:8px">Nothing in ${esc(f)}.</div></div>`;
@@ -2712,24 +2718,28 @@ window.fcWhoPick = (el, id) => {
 };
 
 window.fbConfirmSave = async () => {
+  if (window._fbConfirmBusy) return;   // guard against a double-tap creating two appointments
   const date=document.getElementById('fcDate').value, time=document.getElementById('fcTime').value||'10:00';
   if(!date){ toast(lang==='es'?'Elige una fecha':'Pick a date'); return; }
-  const startsAt = new Date(date+'T'+time+':00').toISOString();
-  const { data, error } = await sb.rpc('fb_confirm_appointment', {
-    p_lead_id: fbActiveId,
-    p_starts_at: startsAt,
-    p_title: document.getElementById('fcTitle').value.trim() || null,
-    p_address: document.getElementById('fcAddr').value.trim() || null,
-    p_notes: document.getElementById('fcNotes').value.trim() || null,
-    p_assigned_to: document.getElementById('fcWho').value || null,
-    p_phone: (document.getElementById('fcPhone')?.value||'').trim() || null
-  });
-  if (error){ toast(error.message); return; }
-  if (data && data.error){ toast(data.error); return; }
-  toast(lang==='es'?'Contacto y cita creados ✓':'Contact + appointment created ✓');
-  document.querySelector('.modal-scrim')?.remove();
-  await fbLoadLeads();
-  fbRenderHead();
+  window._fbConfirmBusy = true;
+  try {
+    const startsAt = new Date(date+'T'+time+':00').toISOString();
+    const { data, error } = await sb.rpc('fb_confirm_appointment', {
+      p_lead_id: fbActiveId,
+      p_starts_at: startsAt,
+      p_title: document.getElementById('fcTitle').value.trim() || null,
+      p_address: document.getElementById('fcAddr').value.trim() || null,
+      p_notes: document.getElementById('fcNotes').value.trim() || null,
+      p_assigned_to: document.getElementById('fcWho').value || null,
+      p_phone: (document.getElementById('fcPhone')?.value||'').trim() || null
+    });
+    if (error){ toast(error.message); return; }
+    if (data && data.error){ toast(data.error); return; }
+    toast(lang==='es'?'Contacto y cita creados ✓':'Contact + appointment created ✓');
+    document.querySelector('.modal-scrim')?.remove();
+    await fbLoadLeads();
+    fbRenderHead();
+  } finally { window._fbConfirmBusy = false; }
 };
 
 // ── Build #1: capture the Messenger sale ── turn a Facebook close into a priced, rep-attributed
@@ -5323,7 +5333,14 @@ window.createDeal = async () => {
       const r = await fetch(N8N_NOTIFY, { method:'POST', body: new URLSearchParams({ action:'deal-created', deal_code: code, customer: deal.clients?.name||'', type, price: deal.sale_price, lender: deal.lender, rep: me.name, ...(divisions.length > 1 ? { divisions: divisions.join('+') } : {}) }) });
       const j = await r.json();
       if (j.folder_id) await sb.from('deals').update({ drive_folder_id: j.folder_id, drive_folder_url: j.folder_url }).eq('id', deal.id);
-    } catch(e) { console.warn('n8n notify failed', e); }
+      else throw new Error('no folder id returned');
+    } catch(e) {
+      // The Drive folder is created by n8n; if that call fails the job would otherwise have NO folder
+      // and nobody would know. Leave a visible timeline note so it can be retried, instead of only console.warn.
+      console.warn('n8n notify failed', e);
+      await sb.from('deal_events').insert({ deal_id: deal.id, event: 'note', detail: '⚠ Drive folder was not created automatically (automation error). Create/link it manually or re-run.', by_id: me.id }).catch(()=>{});
+      toast(lang==='es' ? 'Trabajo creado (la carpeta de Drive falló — revísala)' : 'Job created (Drive folder failed — check the timeline)');
+    }
     toast('Job created');
     document.querySelector('.modal-scrim')?.remove();
     render();
@@ -5943,9 +5960,11 @@ window.crmFileOpen = async (fid) => {
 window.crmFileDel = async (fid, scope, id) => {
   if (!confirm(lang==='es'?'¿Eliminar este archivo?':'Delete this file?')) return;
   let f=null; for (const k in crmFilesCache){ const hit=(crmFilesCache[k]||[]).find(x=>x.id===fid); if(hit){f=hit;break;} }
+  // Remove the stored object first (best-effort), THEN the row — so a failed delete never leaves the
+  // row pointing at a file that's already gone; worst case is a harmless orphaned blob if storage errors.
+  if (f && f.storage_path) { try { await sb.storage.from('crm-files').remove([f.storage_path]); } catch(_){} }
   const { error } = await sb.from('crm_files').delete().eq('id', fid);
   if (error){ toast(error.message); return; }
-  if (f) await sb.storage.from('crm-files').remove([f.storage_path]);
   toast(lang==='es'?'Eliminado':'Deleted');
   await crmRefresh(scope);
 };
@@ -6083,7 +6102,8 @@ window.uploadDealPhotos = async (dealId, input) => {
       const { error: upErr } = await sb.storage.from('deal-photos').upload(path, blob, { contentType: 'image/jpeg', upsert: false });
       if (upErr) throw upErr;
       const { data: pub } = sb.storage.from('deal-photos').getPublicUrl(path);
-      await sb.from('deal_photos').insert({ deal_id: dealId, storage_path: path, url: pub.publicUrl, uploaded_by: me.id, uploaded_by_name: me.name });
+      const { error: rowErr } = await sb.from('deal_photos').insert({ deal_id: dealId, storage_path: path, url: pub.publicUrl, uploaded_by: me.id, uploaded_by_name: me.name });
+      if (rowErr) throw rowErr;   // storage upload succeeded but the DB row didn't — surface it instead of a false "uploaded"
       done++; toast(done + '/' + files.length + (lang==='es'?' subida(s)':' uploaded'));
     } catch(e) { toast('Photo failed: ' + (e.message || e)); }
   }
@@ -6921,9 +6941,11 @@ window.sendGustavoEmail = async (id, btn) => {
     try {
       await sb.from('deal_events').insert({ deal_id: id, event: 'milestone', detail: 'Site survey & plans request emailed to Gustavo (Castle Exergy) — ' + to, by_id: me.id });
       const stages = (settings.milestones || {}).solar || [];
-      let svIdx = stages.findIndex(s => /site survey/i.test(s));
-      if (svIdx < 0) svIdx = 5;
-      await sb.from('deals').update({ milestone: stages[svIdx] || 'Site Survey & Plans', milestone_index: svIdx }).eq('id', id);
+      const svIdx = stages.findIndex(s => /site survey/i.test(s));
+      // Only set the index when we actually found the stage — never guess a hardcoded position
+      // (that could write a wrong milestone_index if the ladder changes).
+      if (svIdx >= 0) await sb.from('deals').update({ milestone: stages[svIdx], milestone_index: svIdx }).eq('id', id);
+      else await sb.from('deals').update({ milestone: 'Site Survey & Plans' }).eq('id', id);
     } catch (_) {}
     toast(es?'Correo enviado a Gustavo':'Email sent to Gustavo');
     document.querySelector('.modal-scrim')?.remove();
@@ -7028,7 +7050,8 @@ async function postDealNote(id, v){
     toast('Task created' + (assignee ? ' for ' + assignee.name.split(' ')[0] : ''));
     return 'task';
   }
-  await sb.from('deal_events').insert({ deal_id: id, event: 'note', detail: v, by_id: me.id });
+  const { error: noteErr } = await sb.from('deal_events').insert({ deal_id: id, event: 'note', detail: v, by_id: me.id });
+  if (noteErr) { toast(noteErr.message); return 'err'; }   // don't fire chat notifications for a note that didn't save
   // @AI / @Claudio — deal-aware question; the answer comes back into this job's feed (house team only)
   if (isHouse() && /@(ai|claudio)\b/i.test(v)) {
     await sb.from('team_messages').insert({ by_id: me.id, by_name: me.name, deal_id: id, ai_request: true, by_dealer: me.dealer_id,
@@ -7046,8 +7069,11 @@ window.addNote = async (id) => {
   const r = await postDealNote(id, v);
   if (r === 'err') return;
   if (r === 'ai') {
-    setTimeout(() => { if (document.getElementById('noteIn')) openDeal(id); }, 8000);
-    setTimeout(() => { if (document.getElementById('noteIn')) openDeal(id); }, 16000);
+    // Only refresh if the user is STILL on this same deal — otherwise the old guard (just "a noteIn exists")
+    // would yank them back here from whatever deal they navigated to.
+    const stillHere = () => location.hash.includes(id);
+    setTimeout(() => { if (stillHere()) openDeal(id); }, 8000);
+    setTimeout(() => { if (stillHere()) openDeal(id); }, 16000);
   }
   openDeal(id);
 };
@@ -11350,7 +11376,12 @@ window.setupContactPresentation = async (clientId, presId) => {
   const base = pick ? pick.cfg : salesLatestCfg(arr);   // edit a specific one, or template off the latest
   const cfg = loadSalesCfg();
   if (presId === 'new') { Object.keys(cfg).forEach(k => { if (!['pkgId','lenderIds'].includes(k)) delete cfg[k]; }); }  // fresh build keeps default pkg/lenders
-  else if (base && typeof base === 'object') Object.assign(cfg, base);
+  else if (base && typeof base === 'object') {
+    // Clear the scratchpad before loading the saved snapshot, so fields absent from it (panels,
+    // bill file, land items…) don't leak in from the previously-worked customer.
+    Object.keys(cfg).forEach(k => { if (!['pkgId','lenderIds'].includes(k)) delete cfg[k]; });
+    Object.assign(cfg, base);
+  }
   cfg.clientId = clientId; cfg.dealId = '';
   if (!cfg.address && row && row.properties && row.properties[0]) cfg.address = row.properties[0].address || '';
   if (cfg.pkgId && !(pkgCache||[]).some(p => p.id === cfg.pkgId)) cfg.pkgId = (pkgCache[0]||{}).id || cfg.pkgId;
@@ -11368,6 +11399,8 @@ window.presentContactPres = async (clientId, presId) => {
   const pres = (presId ? (arr.find(p => p.id === presId) || {}).cfg : salesLatestCfg(arr));
   if (!salesPresReady(pres)) { toast(es?'Arma la presentación de este cliente primero':'Set up this client\'s presentation first'); setupContactPresentation(clientId, 'new'); return; }
   const cfg = loadSalesCfg();
+  // Clear the scratchpad before loading this customer's snapshot so nothing bleeds over from the last one.
+  Object.keys(cfg).forEach(k => { if (!['pkgId','lenderIds'].includes(k)) delete cfg[k]; });
   Object.assign(cfg, pres, { clientId });
   salesCfg = cfg;
   try { localStorage.setItem('sales_cfg', JSON.stringify(cfg)); } catch(_){}
@@ -11404,7 +11437,10 @@ window.presentDeal = async (dealId) => {
   }
   if (!salesPresReady(pres)) { toast(es?'Este trabajo no tiene presentación guardada':'No saved presentation on this job'); if (d && d.client_id) setupContactPresentation(d.client_id, 'new'); return; }
   const cfg = loadSalesCfg();
-  Object.assign(cfg, pres, { dealId, clientId: (d && d.client_id) || cfg.clientId });
+  // Clear the scratchpad before loading this job's snapshot so nothing bleeds over from the last customer.
+  const _keepClient = (d && d.client_id) || cfg.clientId;
+  Object.keys(cfg).forEach(k => { if (!['pkgId','lenderIds'].includes(k)) delete cfg[k]; });
+  Object.assign(cfg, pres, { dealId, clientId: _keepClient });
   salesCfg = cfg;
   try { localStorage.setItem('sales_cfg', JSON.stringify(cfg)); } catch(_){}
   if (!(+salesCfg.annualKwh>0)) { try { await salesAutoBill({ force:true, silent:true }); } catch(_){} } // no usage saved → read the bill on file
@@ -12464,7 +12500,8 @@ window.shGenQuote = () => {
   if (clientId) {
     sb.from('clients').select('id,name,email,phone,properties(id,address)').eq('id', clientId).maybeSingle()
       .then(({ data: c }) => { if (c) quoteModal({ contact: c, solar: true }, items);
-        else toast(lang==='es' ? 'Vincula un contacto arriba primero' : 'Link a contact up top first'); });
+        else toast(lang==='es' ? 'Vincula un contacto arriba primero' : 'Link a contact up top first'); })
+      .catch(e => toast((lang==='es' ? 'No se pudo abrir la cotización: ' : 'Could not open the quote: ') + (e.message || e)));   // was unhandled → modal silently never opened on a network hiccup
     return;
   }
   toast(lang==='es' ? 'Vincula un contacto arriba para generar la cotización' : 'Link a contact up top to generate the quote');
@@ -14423,6 +14460,7 @@ window.paySingleProof = async (file) => {
   catch(e){ toast(e.message); }
 };
 window.payReqReject = async (id) => {
+  if (!confirm(lang==='es'?'¿Rechazar este pago? No se puede deshacer.':'Reject this payout? This cannot be undone.')) return;   // approve confirms; reject should too
   const { error } = await sb.from('payout_requests').update({ status: 'rejected', approved_by: me.id, approved_by_name: me.name, approved_at: new Date().toISOString() }).eq('id', id);
   if (error) { toast(error.message); return; }
   await sb.from('tasks').update({ done: true }).eq('payout_request_id', id);   // clear the approval to-do
