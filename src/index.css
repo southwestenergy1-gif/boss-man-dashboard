@@ -18,6 +18,11 @@
 }
 
 @layer components {
+  /* CRM form controls */
+  .crm-input {
+    @apply w-full bg-slate-950 border border-slate-700 text-slate-100 text-sm rounded-lg px-3 py-2.5 outline-none transition placeholder:text-slate-500 focus:border-slate-500;
+  }
+
   /* Neon glow effect */
   .neon-glow {
     @apply shadow-lg transition-all duration-300;

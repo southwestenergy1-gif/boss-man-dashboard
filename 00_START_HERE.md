@@ -15,7 +15,7 @@ A fully functional dashboard showing:
 - **Marketing** (ad spend, ROAS, campaigns)
 - **Business Health** (targets, milestones)
 
-Across **3 businesses:** Solar, Construction, Aqua Systems
+Across **3 businesses:** Solar, Construction, Home Improvement
 
 With **mock data included** so you can see it in action right now.
 
@@ -33,7 +33,7 @@ npm start
 
 Browser opens → Dashboard is live.
 
-Click the tabs (Solar | Construction | Aqua) → Watch metrics update.
+Click the tabs (Solar | Construction | Home Improvement) → Watch metrics update.
 
 **That's it.** Everything works with mock data.
 
@@ -89,7 +89,7 @@ Click the tabs (Solar | Construction | Aqua) → Watch metrics update.
 
 ### Header
 - **"BOSS MAN"** text (big, glowing)
-- **Business tabs** (Solar | Construction | Aqua Systems)
+- **Business tabs** (Solar | Construction | Home Improvement)
 - **Live indicator** (status + online badge)
 
 ### Quick Stats (Top Row)
@@ -110,7 +110,7 @@ Click the tabs (Solar | Construction | Aqua) → Watch metrics update.
 ### Colors Per Business
 - **Solar:** Neon Green (#00FF88)
 - **Construction:** Neon Cyan (#00D4FF)
-- **Aqua Systems:** Neon Magenta (#FF00FF)
+- **Home Improvement:** Neon Magenta (#FF00FF)
 
 ---
 
@@ -194,7 +194,7 @@ solar: {
 ### Code
 - **7 React components** - All in `src/components/`
 - **5 dashboard sections** - Leads, Accounting, Unit Economics, Marketing, Health
-- **3 business units** - Solar, Construction, Aqua Systems
+- **3 business units** - Solar, Construction, Home Improvement
 - **40+ metrics** - All configured and displayed
 - **4 chart types** - Bar, Line, Pie, Doughnut charts
 
