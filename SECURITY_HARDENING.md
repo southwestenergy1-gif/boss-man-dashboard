@@ -4,12 +4,11 @@
 
 ---
 
-## A. Safe & non-breaking — do first (Supabase only)
+## A. Safe & non-breaking — do first (Supabase only)  ✅ APPLIED 2026-07-02 (2 of 3; #2 is a manual toggle)
 
-1. **Pin `search_path` on all SECURITY DEFINER functions** (advisor: `function_search_path_mutable`, ~13 functions). Prevents search-path injection. Pure hardening, no behavior change:
-   `ALTER FUNCTION public.<fn>(<args>) SET search_path = public, pg_temp;` for each flagged function.
-2. **Enable leaked-password protection** in Auth (advisor: `auth_leaked_password_protection`). Dashboard → Authentication → Password protection (or Auth config). No app impact.
-3. **Scope the public-bucket read policies** so clients can't *list* every file in `chat-files` and `logos` (advisor: `public_bucket_allows_listing`). Keep object reads working; drop broad `SELECT` listing. Verify the CRM still loads chat attachments + logos after (it fetches by known path / public URL, so it should be unaffected).
+1. ✅ **DONE — Pinned `search_path` on the 13 flagged SECURITY DEFINER functions** (migration `pin_search_path_security_definer_fns`): crm_email_apply, crm_email_event, crm_email_lastname, crm_email_match, crm_urlencode, deal_split_totals, fb_is_junk, service_calls_set_code, surveyor_scope, tg_deal_special_flag, tg_deal_stage_outbox, tg_deals_recompute_financials, tg_email_overwatch — all now `SET search_path = public, pg_temp`. Verified 0 remain unpinned. Pure hardening, no behavior change.
+2. ⏳ **MANUAL (owner) — Enable leaked-password protection** in Auth (advisor: `auth_leaked_password_protection`). This is a dashboard-only toggle (no SQL/API path from here): Supabase Dashboard → Authentication → Sign In / Providers (or Policies) → turn on "Leaked password protection" (checks HaveIBeenPwned). No app impact. ~30 seconds.
+3. ✅ **DONE — Scoped public-bucket listing** (migration `scope_public_bucket_listing`): dropped the broad `SELECT` policies `chat-files read` (authenticated) and `logos_public_read` (public) so clients can no longer *list* every file. Confirmed safe: both buckets are `public`, the CRM only fetches them by known path via `getPublicUrl` (public-URL reads bypass storage RLS) and has zero `.list()` calls; the private buckets `crm-files`/`deal-photos` (which use createSignedUrl/.download) were untouched. Object reads + logos still load.
 
 ## B. Medium — needs a look before applying (verify caller, then Supabase)
 
