@@ -1,6 +1,11 @@
 # Security Hardening Plan — ready to execute
 
-**Status:** planned, **not yet applied.** These need the Supabase and/or n8n connectors (both were flapping/disconnected when this was written) and, for a few, a quick check of how n8n authenticates before touching production. Nothing here has been run. Grouped by risk so the safe ones can go first.
+**Status 2026-07-02 (second pass): EXECUTED.** Groups A, B, C, D are done except three ~2-minute owner-dashboard steps that have no API path from here:
+1. Supabase → Authentication → enable **leaked-password protection** (A#2)
+2. Google Cloud Console → **referrer-restrict the Maps key** to `https://bossportal.space/*` (C#8)
+3. Supabase → Edge Functions → **delete the `claudio-chat` + `claudio-watch` stubs** (D#12) · and paste the Console agent prompt update (D#10)
+
+New infrastructure this pass: `n8n-relay` edge fn v2 (authenticated proxy for client→n8n webhooks), `x-swe-relay` guard nodes in 3 n8n workflows, secrets `n8n_relay_secret` + `cold_quotes_secret` in `email_config`. crm.html relay change deployed to bossportal.space and committed/pushed to `boss-portal` (`1e15200`).
 
 ---
 
@@ -18,10 +23,10 @@
 - ✅ **dispatch update tightened** (`dispatch_assignments_update_with_check`): added the missing `WITH CHECK` mirroring `disp_update`'s USING clause.
 - ✅ **anon EXECUTE revoked on 4 ungated side-effect fns** (`revoke_anon_exec_ungated_side_effect_fns_v2`): `obligations_autopay_sweep` (kept `authenticated` — Accounting page uses it), `appt_send_reminders`, `claudio_morning_digest`, `followup_health_scan` (cron-only → `service_role` only). All owned by `postgres`, so pg_cron still runs them. Verified via `has_function_privilege`.
 
-**Still to do in B (need owner/n8n verification — HOLD):**
-- ⏳ Revoke anon EXECUTE on `pipeline_resolve_epe(uuid)`, `pipeline_match_epe_ai(text,text)`, `followup_timeline_html(text)` — no client use, but confirm their edge-function / internal callers use `service_role` before revoking (grant `service_role` alongside).
-- ⏳ **`notifications` cross-user insert** (`notif_insert` via `can_notify`): any authenticated rep can push notification text to every admin/ops + same-dealer user (phishing vector). Tighten `can_notify` — but first confirm which legit frontend flows insert cross-user notifications so we don't break task-assignment pings.
-- ⏳ `cold_quotes` secret rotation → see #5 (needs n8n coordination).
+**B holds — ALL CLOSED 2026-07-02 (second pass):**
+- ✅ **anon EXECUTE revoked on the 3 held fns** (`revoke_public_exec_pipeline_epe_and_followup_timeline`). Callers verified first: `pipeline_resolve_epe`/`pipeline_match_epe_ai` are called ONLY by the `pipeline-email-watcher` edge fn via service_role → revoked from PUBLIC+anon+authenticated. `followup_timeline_html` is called by `followups_tick` (pg_cron) and the client-invoked `followup_send_test` → revoked anon only, kept authenticated. ⚠️ GOTCHA found: these fns carried the default `PUBLIC` execute grant, so a plain `REVOKE ... FROM anon` was a no-op — had to revoke from PUBLIC and re-grant. All verified via `has_function_privilege` (the 4 fns from the first pass re-checked clean too).
+- ✅ **notifications insert tightened** (`tighten_notifications_insert_anti_impersonation`). Verified every legit cross-user flow first (task/dispatch/appointment pings, tags, DM/mention notifs, payout-request→admins, lender-draw→admins, payout-approved→requester) — reps DO need to notify admins, so targeting rules (can_notify) stay. What non-ops/admin senders can no longer do: impersonate (`by_name` must equal their own profiles.name — no more fake "Claudio 🤖"), forge system-looking types (only task/commission/mention), or attach external links (url must be blank or in-app). `tg_deal_special_flag` made SECURITY DEFINER so its urgent-install ping (by_name 'Claudio') keeps working. Verified live by simulating a rep JWT: legit ping inserts, phish insert blocked by RLS.
+- ✅ **cold_quotes secret ROTATED** (`cold_quotes_secret_to_email_config`): weak 32-hex literal replaced by a strong 64-hex secret stored in `email_config.cold_quotes_secret` (future rotations = config change, no fn redeploy; fails closed if missing). n8n caller found ("SWE CRM — Cold Quote Chaser" `zAFXKLAkZAwCynAE`, daily 9am → Slack) and updated + PUBLISHED in the same change (⚠️ n8n updates land in a draft — must publish or the live version keeps the old secret). Verified: old secret returns [], config matches, workflow active version carries the new secret.
 
 4. **Lock down anon-executable functions.** ~79 functions grant `EXECUTE` to `anon`. Triggers are harmless; the concern is the non-trigger, no-auth ones callable with the public key. **Before revoking, confirm how each is called:**
    - Cron/side-effect fns (`appt_send_reminders`, `followups_tick`, `calendar_poll`, `claudio_morning_digest`, `email_renew_watches`, `pipeline_resolve_epe`, `followup_timeline_html`): if invoked by **pg_cron / server-side**, `REVOKE EXECUTE ... FROM anon;` is safe. If any is hit by an n8n HTTP call using the anon key, it needs a token instead first.
@@ -29,21 +34,28 @@
 5. **Rotate the weak `cold_quotes` secret** (`81fc0f75...`, a 32-hex literal that dumps every stale quote's client name/email/total/rep). Replace with a strong secret **and** update the caller in n8n in the same change, or the report breaks. Same treatment for the other `p_secret` fns if their secrets are weak.
 6. **Verify RLS actually backs the client-side gates.** The app enforces role/money/permission in the browser; that's only real if RLS matches. Audit write policies on: `payout_requests`, `obligations`, `deal_expenses`, `profiles` (esp. the `role` / `can_see_money` columns — a tampered client must not self-escalate), `service_calls`, `dispatch_assignments`, `deals.rep_id`, `notifications` (cross-user inserts), `app_settings`, `sequences`, `chat_groups`. And confirm **Realtime authorization** on the intercom channel `intercom:swe-office` so office audio can't be listened to / injected with just the public key.
 
-## C. Needs n8n + external consoles (not Supabase)
+## C. Needs n8n + external consoles (not Supabase)  ✅/🔶 CLOSED 2026-07-02 (see notes)
 
-7. **Authenticate the n8n webhooks** shipped in the client (`crm2-notify`, `sc-notify`, `crm-chat`, `pay`, and the send-side `send-quote`/`send-contract` paths). Add a shared secret/signature header the workflow verifies, so a stranger reading page source can't POST "Southwest Energy" emails, spam Slack/notify, or fire payment-request automation.
-8. **Referrer-restrict the Google Maps / Places key** (`AIzaSy...`) in Google Cloud Console → Credentials → HTTP referrer restriction (limit to your CRM domain). It's billable and currently open.
-9. **`CP_PARSE_KEY`** (`pk_swe_...`) shared AI-parse secret is baked in the client and can't be rotated without a redeploy — move it server-side behind an authenticated endpoint.
+7. ✅ **n8n webhooks authenticated via a relay** (not a client-embedded secret — that would be just as public as the URLs were). New `n8n-relay` edge function (v2): the CRM client now calls it with the rep's Supabase session JWT; the relay verifies an active, non-`pending` profile, then forwards to n8n adding the server-held `x-swe-relay` header (`email_config.n8n_relay_secret`). The three fetch-style hooks — `crm2-notify` ("SWE CRM2 — Side Effects"), `sc-notify` ("SWE Service Call Emails"), `crm-chat` ("Deal Chat → Slack") — got a "Relay Auth" IF-node guard, published. crm.html updated (relayFetch helper, 12 call sites) and DEPLOYED to bossportal.space. Verified: no-auth/bad-token/anon-key/pending → 401/403; rep token → full e2e 200 with a no-op action; direct webhook POST without header → 401 (sc-notify acks 200 by design but nothing downstream runs). Test user fully deleted.
+   - **`pay` is NOT covered** (accepted risk for now): it's an n8n *form* opened in a link/iframe on the Sub Pay page, not a fetch — a client secret can't protect a user-facing form. Abuse = spam requests into the Slack #payments approval queue that a human still approves. Real fix later: rebuild the form inside the CRM behind login.
+   - `send-quote`/`send-contract` were already safe — they moved to `/api/*` with rep-session auth in earlier sessions; the client's only remaining `solar-closing-signwell` mention is a comment. The still-published n8n rollback workflow (`l0mjwBB8eZ40F1tD`, created SignWell drafts unauthenticated) was **unpublished** — rollback is now: republish it in n8n + point the client back.
+8. ⏳ **MANUAL (owner)** — Referrer-restrict the Google Maps / Places key (`AIzaSy...`): Google Cloud Console → APIs & Credentials → the key → "Websites" restriction → add `https://bossportal.space/*`. No API path from here. ~2 minutes.
+9. ✅ resolved-by-finding — **`CP_PARSE_KEY` gates nothing**: `/api/pricing/parse` does not exist in api/index.js (live returns 401 from the generic auth gate), so the contractor-plan-parse feature is dead code and the baked key protects no live endpoint. When the feature is actually built, implement it server-side with session/token auth and drop the `k` field; until then no action needed.
 
-## D. Claudio follow-ups (policy / external)
+## D. Claudio follow-ups (policy / external)  ✅ CLOSED 2026-07-02 (one dashboard step left)
 
-10. Add the new `send_email` tool to the **Console (auto-pipeline) agent's** instructions so the autonomous Claudio uses it.
-11. **Widen `claudio_write_allowlist`** beyond Chris + Efrain to the office managers who should be able to have Claudio act.
-12. Delete retired stubs `claudio-chat` / `claudio-watch`; freshen the `crm-mcp` `money_watch` tool *description* (its code is already fixed).
+10. ⏳ **MANUAL (owner)** — Add `send_email` to the Console (auto-pipeline) agent's instructions — paste from `CLAUDIO_CONSOLE_AGENT_PROMPT.md` (it already includes the tool). Lives in the Anthropic Console, no API path from here.
+11. ✅ resolved-by-architecture — the old `claudio_write_allowlist` table (Chris + Efrain) is **vestigial**: nothing reads it anymore. claudio-dm v21's gate (`claudioCanAct`) is role-based — any ACTIVE `ops`/`admin` profile can have Claudio act, which already covers the office managers (Silvia, Andres, Miguel, both Efrains, Yair); expenses stay behind `can_see_money`/`claudio_capabilities`, and `claudio_action` re-checks server-side. No change needed; the dead table can be dropped in a future cleanup.
+12. 🔶 **`money_watch` description freshened** — crm-mcp v13 deployed (only the description + server version string changed), verified live: tools/list shows the per-type stage wording, crm_overview call returns real data. **Stub deletion (`claudio-chat`/`claudio-watch`) is a MANUAL dashboard step** — the management connector has no delete-function API. Supabase Dashboard → Edge Functions → delete both (they're 410 stubs; zero risk). ~30 seconds.
 
 ---
 
 ### Suggested order
 A (all, safe) → B#6 (verify RLS — highest real risk if a gate is only client-side) → B#4/#5 (lock/rotate, with n8n coordination) → C#7 (webhook auth) → C#8/#9 → D.
 
-I'll execute A immediately once Supabase is back, then walk B with you since a wrong revoke/rotate can break a live automation.
+### 2026-07-02 deploy-visibility check (owner reported "CRM looks unchanged")
+Verified server-side: bossportal.space serves the NEW crm.html (13.5px .muted, "Go to job", escJs ×23) and the NEW claudio-buddy.js (2026-07-02 parked-orange build, byte-identical to the repo); `/crm` is a cache-busting redirect (`?v=timestamp`); the service worker is network-first with NO page caching. So the stale view is the Mac app holding an old loaded page, not the deploy. Fix for the owner: quit the CRM app fully (⌘Q) and reopen, or press ⌘R inside it; on any phone/browser, opening `bossportal.space/crm` always pulls fresh. The buddy only appears AFTER login for house-team users (injected per-profile).
+
+### Still open from the original list (untouched this pass)
+- B#6 full RLS-vs-client-gate audit of the remaining write-policy tables (`obligations`, `deal_expenses`, `service_calls`, `deals.rep_id`, `app_settings`, `sequences`, `chat_groups`) + Realtime authorization on `intercom:swe-office`.
+- C#7 `pay` n8n form (accepted risk, see note) — future: in-CRM form behind login.
