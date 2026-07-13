@@ -937,6 +937,19 @@ const TGUC_BANDS = [
 ];
 function pmtFactor(apr, months){ if(apr<=0) return 1/months; const r=apr/1200; return r/(1-Math.pow(1+r,-months)); }
 const TGUC_TERMS = [ {months:36,min:2500,max:10000},{months:48,min:2500,max:10000},{months:60,min:2500,max:'CAP'},{months:84,min:7500,max:'CAP'},{months:120,min:10000,max:'CAP'},{months:180,min:15000,max:'CAP'} ];
+// TGUC "STANDARD" program (TGUC POS offer screens, confirmed 2026-07-13): term-specific
+// buy-downs shown alongside the band sheet. "Program Fee" = dealer fee, financed on top.
+// Only the 60/96/120mo tiers seen on the POS are listed — don't extrapolate other terms.
+// No minimum amount was shown, so none is enforced here; TGUC's POS is the authority.
+const TGUC_STANDARD_MAX = 85000;
+const TGUC_STANDARD = [
+  { months:60,  apr:6.99, fee:9.25  },
+  { months:60,  apr:5.99, fee:11.25 },
+  { months:96,  apr:6.99, fee:9.25  },
+  { months:96,  apr:5.99, fee:11.25 },
+  { months:120, apr:6.99, fee:9.25  },
+  { months:120, apr:5.99, fee:11.25 },
+];
 function tgucProducts(band){
   const b = TGUC_BANDS.find(x => x.band === band) || TGUC_BANDS[0];
   const out = [];
@@ -945,6 +958,7 @@ function tgucProducts(band){
     const maxAmt = term.max === 'CAP' ? b.cap : term.max;
     out.push({ bank:'TGUC Financial', apr:t.apr, payment_factor:pmtFactor(t.apr, term.months), dealer_fee_rate:t.fee/100, term_label:term.months+'mo', note:`${term.months}mo · $${(term.min/1000)}k–$${(maxAmt/1000)}k`, minAmt:term.min, maxAmt });
   }));
+  TGUC_STANDARD.forEach(s => out.push({ bank:'TGUC Financial', apr:s.apr, payment_factor:pmtFactor(s.apr, s.months), dealer_fee_rate:s.fee/100, term_label:s.months+'mo', note:`Standard · ${s.fee}% Program Fee · up to $${TGUC_STANDARD_MAX/1000}k`, minAmt:0, maxAmt:TGUC_STANDARD_MAX }));
   return out;
 }
 
@@ -1195,6 +1209,10 @@ async function loadConfig(){
     const maxAmt = term.max === 'CAP' ? b.cap : term.max;
     lenders.push({ id:'tguc-'+b.band.replace(/[^0-9]/g,'')+'-'+term.months+'-'+String(t.apr).replace('.','')+'-'+String(t.fee).replace('.',''), bank:'TGUC Financial', band:b.band, apr:t.apr, payment_factor:pmtFactor(t.apr,term.months), dealer_fee_rate:t.fee/100, term_label:term.months+'mo', note:t.fee+'% Dealer Fee', minAmt:term.min, maxAmt });
   })));
+  // TGUC "STANDARD" program shows for every band ('std' in the id keeps it distinct from band-tier ids)
+  TGUC_BANDS.forEach(b => TGUC_STANDARD.forEach(s => {
+    lenders.push({ id:'tguc-'+b.band.replace(/[^0-9]/g,'')+'-std-'+s.months+'-'+String(s.apr).replace('.','')+'-'+String(s.fee).replace('.',''), bank:'TGUC Financial', band:b.band, apr:s.apr, payment_factor:pmtFactor(s.apr,s.months), dealer_fee_rate:s.fee/100, term_label:s.months+'mo', note:'Standard · '+s.fee+'% Program Fee', minAmt:0, maxAmt:TGUC_STANDARD_MAX });
+  }));
 }
 
 let lang = localStorage.getItem('crm_lang') || 'en';
